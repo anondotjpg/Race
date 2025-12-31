@@ -9,7 +9,7 @@ import { CountdownTimer } from './components/CountdownTimer';
 import { WalletConnect } from './components/WalletConnect';
 import { ResultsModal } from './components/ResultsModal';
 import { BetMarquee } from './components/BetMarquee';
-import toast, { Toaster } from 'react-hot-toast'; // Import Toast
+import toast, { Toaster } from 'react-hot-toast';
 
 export default function Home() {
   const { 
@@ -28,7 +28,6 @@ export default function Home() {
   const [showResults, setShowResults] = useState(false);
   const [lastShownResultId, setLastShownResultId] = useState<string | null>(null);
 
-  // Define the retro toast style
   const toastStyle = {
     borderRadius: '0px',
     background: '#000',
@@ -130,7 +129,7 @@ export default function Home() {
       if (!res.ok) throw new Error('Failed to record bet');
 
       toast.success(`Bet Placed: ${amount} SOL on ${horse?.name}`, { 
-        id: loadingToast, // Replace loading toast
+        id: loadingToast, 
         style: toastStyle,
         icon: '🐎'
       });
@@ -144,7 +143,6 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-black font-mono uppercase tracking-tight text-[#1aff00]">
-      {/* TOAST CONTAINER */}
       <Toaster position="top-right" reverseOrder={false} />
 
       <div className="fixed inset-0 pointer-events-none opacity-10 z-[5] bg-[linear-gradient(rgba(0,0,0,0)_50%,rgba(0,0,0,0.35)_50%)] bg-[length:100%_4px]" />
@@ -157,7 +155,22 @@ export default function Home() {
           <div className="text-center text-sm drop-shadow-[0_0_5px_rgba(26,255,0,0.5)]">
             {currentRace ? `RACE #${currentRace.race_number}` : 'NO ACTIVE RACE'}
           </div>
-          <div className="flex justify-end">
+          <div className="flex justify-end items-center gap-4">
+            {/* TWITTER / X LINK */}
+            <a 
+              href="https://twitter.com" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="hover:drop-shadow-[0_0_8px_rgba(26,255,0,0.2)] transition-all duration-200"
+            >
+              <svg 
+                viewBox="0 0 24 24" 
+                aria-hidden="true" 
+                className="h-5 w-5 fill-[#1aff00]"
+              >
+                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"></path>
+              </svg>
+            </a>
             <WalletConnect />
           </div>
         </div>
