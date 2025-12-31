@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/app/lib/supabase';
 import { executeRace, startNewRace } from '@/app/lib/race-engine';
 
+export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
@@ -20,17 +21,19 @@ export async function GET(request: NextRequest) {
   const supabase = createServerSupabaseClient();
   const nowIso = new Date().toISOString();
 
+  let executed = 0;
+  let startedRaceId: string | null = null;
+
   try {
     // ─────────────────────────────────────────────
-    // 1. Execute expired betting races
+    // 1. Execute expired betting races (deterministic)
     // ─────────────────────────────────────────────
     const { data: expiredRaces } = await supabase
       .from('races')
       .select('id')
       .eq('status', 'betting')
-      .lt('betting_ends_at', nowIso);
-
-    let executed = 0;
+      .lt('betting_ends_at', nowIso)
+      .order('betting_ends_at', { ascending: true });
 
     for (const race of expiredRaces ?? []) {
       const result = await executeRace(race.id);
@@ -47,31 +50,32 @@ export async function GET(request: NextRequest) {
       .limit(1)
       .maybeSingle();
 
+    // ─────────────────────────────────────────────
+    // 3. Start a new race if none active
+    // ─────────────────────────────────────────────
     if (!activeRace) {
-      // ─────────────────────────────────────────
-      // 3. Attempt to start a new race
-      // (DB guarantees safety)
-      // ─────────────────────────────────────────
-      const newRaceId = await startNewRace();
-
-      if (newRaceId) {
-        return NextResponse.json({
-          message: 'New race started',
-          raceId: newRaceId,
-          executedRaces: executed,
-        });
-      }
+      startedRaceId = await startNewRace();
     }
 
+    // ─────────────────────────────────────────────
+    // 4. Stable cron response
+    // ─────────────────────────────────────────────
     return NextResponse.json({
-      message: 'Cron ok',
+      ok: true,
       executedRaces: executed,
-      activeRace: !!activeRace,
+      startedRaceId,
+      activeRace: !!activeRace || !!startedRaceId,
+      timestamp: nowIso,
     });
   } catch (err) {
     console.error('[CRON]', err);
     return NextResponse.json(
-      { error: 'Internal error' },
+      {
+        ok: false,
+        error: 'Internal error',
+        executedRaces: executed,
+        startedRaceId,
+      },
       { status: 500 }
     );
   }
