@@ -1,7 +1,4 @@
 // app/api/cron/route.ts
-// This endpoint should be called by a cron job every minute to manage races
-// Use Vercel Cron, Supabase Edge Functions, or external cron service
-
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/app/lib/supabase';
 import { executeRace, startNewRace } from '@/app/lib/race-engine';
@@ -9,66 +6,73 @@ import { executeRace, startNewRace } from '@/app/lib/race-engine';
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
-  // Verify cron secret in production
+  // ─────────────────────────────────────────────
+  // Auth (required in prod)
+  // ─────────────────────────────────────────────
   const authHeader = request.headers.get('authorization');
-  if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (
+    process.env.CRON_SECRET &&
+    authHeader !== `Bearer ${process.env.CRON_SECRET}`
+  ) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   const supabase = createServerSupabaseClient();
+  const nowIso = new Date().toISOString();
 
   try {
-    // Check for races that need to be executed (betting ended)
-    const { data: pendingRaces } = await supabase
+    // ─────────────────────────────────────────────
+    // 1. Execute expired betting races
+    // ─────────────────────────────────────────────
+    const { data: expiredRaces } = await supabase
       .from('races')
-      .select('*')
+      .select('id')
       .eq('status', 'betting')
-      .lt('betting_ends_at', new Date().toISOString());
+      .lt('betting_ends_at', nowIso);
 
-    // Execute any pending races
-    for (const race of pendingRaces || []) {
-      console.log(`Executing race ${race.id}`);
-      await executeRace(race.id);
+    let executed = 0;
+
+    for (const race of expiredRaces ?? []) {
+      const result = await executeRace(race.id);
+      if (result) executed++;
     }
 
-    // Check if we need to start a new race
-    const { data: activeRaces } = await supabase
+    // ─────────────────────────────────────────────
+    // 2. Check if an active race exists
+    // ─────────────────────────────────────────────
+    const { data: activeRace } = await supabase
       .from('races')
-      .select('*')
-      .in('status', ['betting', 'racing']);
+      .select('id')
+      .in('status', ['betting', 'racing'])
+      .limit(1)
+      .maybeSingle();
 
-    if (!activeRaces || activeRaces.length === 0) {
-      // No active races, check when last race finished
-      const { data: lastRace } = await supabase
-        .from('races')
-        .select('*')
-        .eq('status', 'finished')
-        .order('finished_at', { ascending: false })
-        .limit(1)
-        .single();
+    if (!activeRace) {
+      // ─────────────────────────────────────────
+      // 3. Attempt to start a new race
+      // (DB guarantees safety)
+      // ─────────────────────────────────────────
+      const newRaceId = await startNewRace();
 
-      const shouldStartNew = !lastRace || 
-        (lastRace.finished_at && 
-         new Date().getTime() - new Date(lastRace.finished_at).getTime() > 30000); // 30 second break
-
-      if (shouldStartNew) {
-        const newRaceId = await startNewRace();
-        console.log(`Started new race: ${newRaceId}`);
-        return NextResponse.json({ 
-          message: 'New race started', 
+      if (newRaceId) {
+        return NextResponse.json({
+          message: 'New race started',
           raceId: newRaceId,
-          executedRaces: pendingRaces?.length || 0
+          executedRaces: executed,
         });
       }
     }
 
-    return NextResponse.json({ 
-      message: 'Cron check complete',
-      executedRaces: pendingRaces?.length || 0,
-      activeRaces: activeRaces?.length || 0
+    return NextResponse.json({
+      message: 'Cron ok',
+      executedRaces: executed,
+      activeRace: !!activeRace,
     });
-  } catch (error) {
-    console.error('Cron error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  } catch (err) {
+    console.error('[CRON]', err);
+    return NextResponse.json(
+      { error: 'Internal error' },
+      { status: 500 }
+    );
   }
 }
