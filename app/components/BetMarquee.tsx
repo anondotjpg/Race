@@ -1,6 +1,7 @@
 // components/BetMarquee.tsx
 'use client';
 
+import { useEffect, useRef, useState } from 'react';
 import type { HorseWithOdds } from '../types';
 
 interface Bet {
@@ -17,6 +18,12 @@ interface BetMarqueeProps {
 }
 
 export function BetMarquee({ bets, horses }: BetMarqueeProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [offset, setOffset] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
+  const [containerWidth, setContainerWidth] = useState(0);
+  const [contentWidth, setContentWidth] = useState(0);
+
   const formatWallet = (wallet: string) => 
     `${wallet.slice(0, 4)}...${wallet.slice(-4)}`;
 
@@ -28,6 +35,48 @@ export function BetMarquee({ bets, horses }: BetMarqueeProps) {
   };
 
   const getHorse = (horseId: number) => horses.find(h => h.id === horseId);
+
+  // Measure widths
+  useEffect(() => {
+    if (containerRef.current && bets.length > 0) {
+      setContainerWidth(containerRef.current.offsetWidth);
+      const firstChild = containerRef.current.querySelector('.bet-card');
+      if (firstChild) {
+        const cardWidth = (firstChild as HTMLElement).offsetWidth + 12; // + gap
+        setContentWidth(cardWidth * bets.length);
+      }
+    }
+  }, [bets]);
+
+  // Animation loop
+  useEffect(() => {
+    if (bets.length === 0 || contentWidth === 0) return;
+
+    let animationId: number;
+    let lastTime = performance.now();
+
+    const animate = (currentTime: number) => {
+      if (!isPaused) {
+        const delta = currentTime - lastTime;
+        const speed = 50; // pixels per second
+        const movement = (speed * delta) / 1000;
+        
+        setOffset(prev => {
+          const newOffset = prev + movement;
+          // Reset when one full set has scrolled
+          if (newOffset >= contentWidth) {
+            return newOffset - contentWidth;
+          }
+          return newOffset;
+        });
+      }
+      lastTime = currentTime;
+      animationId = requestAnimationFrame(animate);
+    };
+
+    animationId = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(animationId);
+  }, [isPaused, contentWidth, bets.length]);
 
   if (bets.length === 0) {
     return (
@@ -45,7 +94,7 @@ export function BetMarquee({ bets, horses }: BetMarqueeProps) {
     if (!horse) return null;
     
     return (
-      <div className="inline-flex items-center gap-3 px-4 py-3 bg-gray-50 rounded-xl border border-gray-100 mr-3">
+      <div className="bet-card flex-shrink-0 inline-flex items-center gap-3 px-4 py-3 bg-gray-50 rounded-xl border border-gray-100">
         <div 
           className="w-10 h-10 rounded-xl flex items-center justify-center text-lg flex-shrink-0"
           style={{ backgroundColor: `${horse.color}20` }}
@@ -72,6 +121,9 @@ export function BetMarquee({ bets, horses }: BetMarqueeProps) {
     );
   };
 
+  // Calculate how many copies needed to fill screen + buffer
+  const copies = Math.max(3, Math.ceil((containerWidth * 2) / (contentWidth || 1)) + 1);
+
   return (
     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden relative min-h-[88px]">
       {/* Header */}
@@ -87,33 +139,26 @@ export function BetMarquee({ bets, horses }: BetMarqueeProps) {
       <div className="absolute right-0 top-0 bottom-0 w-16 bg-gradient-to-l from-white to-transparent z-10 pointer-events-none" />
       
       {/* Marquee */}
-      <div className="marquee-container pt-10 pb-4">
-        <div className="marquee-content">
-          {bets.map((bet, i) => <BetCard key={`a-${i}`} bet={bet} />)}
-          {bets.map((bet, i) => <BetCard key={`b-${i}`} bet={bet} />)}
-          {bets.map((bet, i) => <BetCard key={`c-${i}`} bet={bet} />)}
-          {bets.map((bet, i) => <BetCard key={`d-${i}`} bet={bet} />)}
+      <div 
+        className="pt-10 pb-4 overflow-hidden"
+        onMouseEnter={() => setIsPaused(true)}
+        onMouseLeave={() => setIsPaused(false)}
+      >
+        <div 
+          ref={containerRef}
+          className="flex gap-3"
+          style={{ 
+            transform: `translateX(-${offset}px)`,
+            width: 'max-content'
+          }}
+        >
+          {Array.from({ length: copies }).map((_, copyIndex) => (
+            bets.map((bet, betIndex) => (
+              <BetCard key={`${copyIndex}-${betIndex}`} bet={bet} />
+            ))
+          )).flat()}
         </div>
       </div>
-      
-      <style jsx>{`
-        .marquee-container {
-          overflow: hidden;
-          width: 100%;
-        }
-        .marquee-content {
-          display: inline-flex;
-          white-space: nowrap;
-          animation: scroll 40s linear infinite;
-        }
-        .marquee-content:hover {
-          animation-play-state: paused;
-        }
-        @keyframes scroll {
-          0% { transform: translateX(0); }
-          100% { transform: translateX(-50%); }
-        }
-      `}</style>
     </div>
   );
 }
