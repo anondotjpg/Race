@@ -9,6 +9,7 @@ import { CountdownTimer } from './components/CountdownTimer';
 import { WalletConnect } from './components/WalletConnect';
 import { ResultsModal } from './components/ResultsModal';
 import { BetMarquee } from './components/BetMarquee';
+import toast, { Toaster } from 'react-hot-toast'; // Import Toast
 
 export default function Home() {
   const { 
@@ -24,11 +25,27 @@ export default function Home() {
   } = useGameState();
   
   const { wallet } = useWallet();
-  
   const [showResults, setShowResults] = useState(false);
-  const [betError, setBetError] = useState<string | null>(null);
-  const [betSuccess, setBetSuccess] = useState<string | null>(null);
   const [lastShownResultId, setLastShownResultId] = useState<string | null>(null);
+
+  // Define the retro toast style
+  const toastStyle = {
+    borderRadius: '0px',
+    background: '#000',
+    color: '#1aff00',
+    border: '4px solid #1aff00',
+    fontFamily: 'monospace',
+    textTransform: 'uppercase' as const,
+    fontSize: '12px',
+    boxShadow: '0 0 15px rgba(26,255,0,0.2)',
+  };
+
+  const errorStyle = {
+    ...toastStyle,
+    color: '#ff4444',
+    border: '4px solid #ff4444',
+    boxShadow: '0 0 15px rgba(239,68,68,0.2)',
+  };
 
   useEffect(() => {
     if (lastResult && !isRacing && lastResult.raceId !== lastShownResultId) {
@@ -45,10 +62,6 @@ export default function Home() {
       setShowResults(false);
     }
   }, [currentRace?.status, showResults]);
-
-  /* ─────────────────────────────────────────────────────────────
-     LOADER (INTENSE BLOOM)
-     ───────────────────────────────────────────────────────────── */
 
   if (loading) {
     return (
@@ -68,21 +81,8 @@ export default function Home() {
             animation: flash-expand 2.2s cubic-bezier(0.16, 1, 0.3, 1) infinite;
           }
         `}</style>
-
         <div className="flash-container">
-          <img
-            src="/load.gif"
-            alt="Loading"
-            className="w-[30vmin] h-[30vmin] pixelated"
-            style={{
-              /* Heavy atmospheric glow that follows image transparency */
-              filter: `
-                drop-shadow(0 0 10px rgba(26, 255, 0, 0.9)) 
-                drop-shadow(0 0 30px rgba(26, 255, 0, 0.5)) 
-                drop-shadow(0 0 60px rgba(26, 255, 0, 0.2))
-              `
-            }}
-          />
+          <img src="/load.gif" alt="Loading" className="w-[30vmin] h-[30vmin] pixelated" style={{ filter: `drop-shadow(0 0 10px rgba(26, 255, 0, 0.9)) drop-shadow(0 0 30px rgba(26, 255, 0, 0.5))` }} />
         </div>
       </div>
     );
@@ -93,164 +93,77 @@ export default function Home() {
     const phantom = win.phantom?.solana || win.solana;
   
     if (!phantom?.isConnected || !phantom?.publicKey) {
-      setBetError('Please connect your wallet first');
-      setTimeout(() => setBetError(null), 3000);
-      return;
-    }
-  
-    if (!currentRace) {
-      setBetError('No active race');
-      setTimeout(() => setBetError(null), 3000);
+      toast.error('Connect Wallet First', { style: errorStyle });
       return;
     }
   
     const horse = horses.find(h => h.id === horseId);
-    if (!horse) {
-      setBetError('Horse not found');
-      setTimeout(() => setBetError(null), 3000);
-      return;
-    }
-  
-    setBetError(null);
-    setBetSuccess(null);
+    const loadingToast = toast.loading('Processing Transaction...', { style: toastStyle });
   
     try {
-      const {
-        PublicKey,
-        Transaction,
-        SystemProgram,
-        Connection,
-        LAMPORTS_PER_SOL,
-      } = await import('@solana/web3.js');
+      const { PublicKey, Transaction, SystemProgram, Connection, LAMPORTS_PER_SOL } = await import('@solana/web3.js');
   
-      const currentWallet = phantom.publicKey.toBase58();
-      const rpcUrl =
-        process.env.NEXT_PUBLIC_SOLANA_RPC ||
-        'https://api.mainnet-beta.solana.com';
-  
+      const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC || 'https://api.mainnet-beta.solana.com';
       const connection = new Connection(rpcUrl, 'confirmed');
-      const fromPubkey = new PublicKey(currentWallet);
-      const toPubkey = new PublicKey(horse.wallet_address);
+      const fromPubkey = new PublicKey(phantom.publicKey.toBase58());
+      const toPubkey = new PublicKey(horse!.wallet_address);
       const lamports = Math.floor(amount * LAMPORTS_PER_SOL);
   
       const { blockhash } = await connection.getLatestBlockhash('confirmed');
-  
-      const transaction = new Transaction().add(
-        SystemProgram.transfer({ fromPubkey, toPubkey, lamports })
-      );
-  
+      const transaction = new Transaction().add(SystemProgram.transfer({ fromPubkey, toPubkey, lamports }));
       transaction.recentBlockhash = blockhash;
       transaction.feePayer = fromPubkey;
   
       const { signature } = await phantom.signAndSendTransaction(transaction);
   
-      if (!signature) {
-        setBetError('Transaction cancelled');
-        setTimeout(() => setBetError(null), 3000);
-        return;
-      }
-  
       const res = await fetch('/api/bet', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          raceId: currentRace.id,
+          raceId: currentRace?.id,
           horseId,
           txSignature: signature,
-          bettorWallet: currentWallet,
+          bettorWallet: phantom.publicKey.toBase58(),
         }),
       });
   
-      const data = await res.json();
-  
-      if (!res.ok) {
-        setBetError(data.error || 'Failed to record bet');
-        setTimeout(() => setBetError(null), 3000);
-        return;
-      }
-  
-      setBetSuccess(`${amount} SOL on ${horse.name}`);
-      setTimeout(() => setBetSuccess(null), 5000);
+      if (!res.ok) throw new Error('Failed to record bet');
+
+      toast.success(`Bet Placed: ${amount} SOL on ${horse?.name}`, { 
+        id: loadingToast, // Replace loading toast
+        style: toastStyle,
+        icon: '🐎'
+      });
+
     } catch (error: any) {
-      if (error?.message?.includes('User rejected')) {
-        setBetError('Transaction cancelled');
-      } else {
-        const msg = error?.message || 'Bet failed';
-        setBetError(msg.length > 50 ? msg.slice(0, 50) + '...' : msg);
-      }
-      setTimeout(() => setBetError(null), 5000);
+      toast.dismiss(loadingToast);
+      const msg = error?.message?.includes('User rejected') ? 'Cancelled' : 'Bet Failed';
+      toast.error(msg, { style: errorStyle });
     }
   };  
 
   return (
     <div className="min-h-screen bg-black font-mono uppercase tracking-tight text-[#1aff00]">
-      {/* GLOBAL CRT SCANLINES */}
-      <div
-        className="
-          fixed inset-0 pointer-events-none opacity-10 z-[5]
-          bg-[linear-gradient(rgba(0,0,0,0)_50%,rgba(0,0,0,0.35)_50%)]
-          bg-[length:100%_4px]
-        "
-      />
+      {/* TOAST CONTAINER */}
+      <Toaster position="top-right" reverseOrder={false} />
 
-      {/* HEADER */}
+      <div className="fixed inset-0 pointer-events-none opacity-10 z-[5] bg-[linear-gradient(rgba(0,0,0,0)_50%,rgba(0,0,0,0.35)_50%)] bg-[length:100%_4px]" />
+
       <header className="sticky top-0 z-40 bg-black border-b-4 border-[#555]">
         <div className="max-w-7xl mx-auto px-4 py-3 grid grid-cols-3 items-center">
-          
-          {/* LEFT: LOGO WITH PIXEL-PERFECT GLOW (NO SQUARE BOX) */}
           <div className="flex items-center">
-            <img
-              src="/load.gif"
-              alt="Logo"
-              className="h-10 w-auto pixelated"
-              style={{
-                /* drop-shadow wraps pixels, box-shadow/backgrounds make squares */
-                filter: `
-                  drop-shadow(0 0 2px rgba(26, 255, 0, 0.8)) 
-                  drop-shadow(0 0 8px rgba(26, 255, 0, 0.4))
-                `
-              }}
-            />
+            <img src="/load.gif" alt="Logo" className="h-10 w-auto pixelated" style={{ filter: `drop-shadow(0 0 2px rgba(26, 255, 0, 0.6))` }} />
           </div>
-
-          {/* CENTER: RACE NUMBER */}
-          <div className="text-center">
-            {currentRace ? (
-              <div className="text-sm text-[#1aff00] drop-shadow-[0_0_5px_rgba(26,255,0,0.5)]">
-                RACE #{currentRace.race_number}
-              </div>
-            ) : (
-              <div className="text-sm text-[#7CFF7C]">
-                NO ACTIVE RACE
-              </div>
-            )}
+          <div className="text-center text-sm drop-shadow-[0_0_5px_rgba(26,255,0,0.5)]">
+            {currentRace ? `RACE #${currentRace.race_number}` : 'NO ACTIVE RACE'}
           </div>
-
-          {/* RIGHT: WALLET */}
           <div className="flex justify-end">
             <WalletConnect />
           </div>
         </div>
       </header>
 
-      {/* MAIN */}
       <main className="max-w-7xl mx-auto px-4 py-6 space-y-6 relative z-10">
-        {/* ERRORS / SUCCESS */}
-        {betError && (
-          <div className="border-4 border-red-500 bg-black p-4 flex gap-3 shadow-[0_0_15px_rgba(239,68,68,0.2)]">
-            <span className="text-red-500">⚠</span>
-            <p className="text-red-400 text-sm">{betError}</p>
-          </div>
-        )}
-
-        {betSuccess && (
-          <div className="border-4 border-[#1aff00] bg-black p-4 flex gap-3 shadow-[0_0_15px_rgba(26,255,0,0.2)]">
-            <span className="text-[#1aff00]">✓</span>
-            <p className="text-[#7CFF7C] text-sm">BET PLACED: {betSuccess}</p>
-          </div>
-        )}
-
-        {/* TOP STRIP */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <CountdownTimer seconds={timeRemaining} totalPool={totalPool} />
           <div className="lg:col-span-2">
@@ -258,7 +171,6 @@ export default function Home() {
           </div>
         </div>
 
-        {/* RACE */}
         <RaceTrack
           horses={horses}
           isRacing={isRacing}
@@ -266,15 +178,10 @@ export default function Home() {
           finalPositions={racePositions}
         />
 
-        {/* BETTING */}
         <div>
           <div className="flex justify-between items-center mb-4">
-            <div className="text-lg text-[#1aff00] drop-shadow-[0_0_8px_rgba(26,255,0,0.4)]">
-              PLACE YOUR BETS
-            </div>
-            <div className="text-[10px] text-[#7CFF7C]">
-              {isRacing ? 'RACE IN PROGRESS' : 'BETTING OPEN'}
-            </div>
+            <div className="text-lg text-[#1aff00] drop-shadow-[0_0_8px_rgba(26,255,0,0.4)]">PLACE YOUR BETS</div>
+            <div className="text-[10px] text-[#7CFF7C]">{isRacing ? 'RACE IN PROGRESS' : 'BETTING OPEN'}</div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -290,7 +197,6 @@ export default function Home() {
           </div>
         </div>
 
-        {/* FOOTER */}
         <footer className="text-center py-6 border-t-4 border-[#555] text-[10px] text-[#7CFF7C]">
           BUILT ON SOLANA • RACES EVERY 1 MINUTE(S)
         </footer>

@@ -3,94 +3,70 @@
 import { useWallet } from "../context/WalletContext";
 
 export function WalletConnect() {
-  const {
-    wallet,
-    connected,
-    connecting,
-    hasProvider,
-    connect,
-    disconnect,
-  } = useWallet();
+  const { wallet, connected, connecting, hasProvider, connect, disconnect } = useWallet();
 
-  // NO PROVIDER (GET PHANTOM)
+  const baseStyle = `
+    h-[40px] px-4 flex items-center justify-center font-mono text-[13px] font-bold uppercase
+    border-2 border-t-[#dfdfdf] border-l-[#dfdfdf] border-b-[#404040] border-r-[#404040]
+    bg-[#c0c0c0] text-black transition-all
+  `;
+
+  const sunkenStyle = `
+    h-[40px] px-3 flex items-center gap-3 bg-black text-[#1aff00]
+    border-2 border-t-[#404040] border-l-[#404040] border-b-[#dfdfdf] border-r-[#dfdfdf]
+  `;
+
+  // 1. NO PROVIDER
   if (!hasProvider) {
     return (
-      <button
-        onClick={() => window.open('https://phantom.app/', '_blank')}
-        className="
-          flex items-center gap-2 px-4 py-2
-          bg-black border-4 border-[#555]
-          font-mono uppercase text-[#1aff00]
-          hover:bg-[#050505]
-        "
-      >
-        <svg className="w-4 h-4 text-[#1aff00]" viewBox="0 0 40 40" fill="currentColor">
-          <path d="M34.8 19.6h-3.5c0-7.1-5.8-12.9-13-12.9-7 0-12.8 5.5-13 12.5-.2 7.2 6.4 13.2 13.2 13.2h1.2c6.4 0 15.1-6.3 15.1-12.8z"/>
-        </svg>
-        GET PHANTOM
+      <button onClick={() => window.open('https://phantom.app/')} className={baseStyle}>
+        Install Phantom
       </button>
     );
   }
 
-  // CONNECTED
+  // 2. CONNECTING
+  if (connecting) {
+    return (
+      <div className={sunkenStyle + " min-w-[160px]"}>
+        <div className="flex gap-1 w-full">
+          {[...Array(8)].map((_, i) => (
+            <div 
+              key={i} 
+              className="h-3 w-full bg-[#1aff00] animate-pulse" 
+              style={{ animationDelay: `${i * 0.1}s` }} 
+            />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // 3. CONNECTED
   if (connected && wallet) {
     return (
-      <div
-        className="
-          flex items-center gap-2
-          bg-black border-4 border-[#555]
-          px-3 py-2
-          font-mono uppercase
-        "
-      >
-        <div className="flex items-center gap-2">
-          <span className="w-2 h-2 bg-[#1aff00] animate-pulse" />
-          <span className="text-[#1aff00] text-sm">
-            {wallet.slice(0, 4)}...{wallet.slice(-4)}
-          </span>
+      <div className="flex items-center gap-1">
+        <div className={sunkenStyle}>
+          <div className="w-2 h-2 bg-[#1aff00] shadow-[0_0_5px_#1aff00] animate-pulse" />
+          <span>{wallet.slice(0, 4)}..{wallet.slice(-4)}</span>
         </div>
-
-        <button
-          onClick={disconnect}
-          className="
-            ml-2 px-2 py-1
-            border-2 border-red-500
-            text-red-500
-            hover:bg-red-500 hover:text-black
-          "
-          title="Disconnect"
+        <button 
+          onClick={disconnect} 
+          className={baseStyle + " px-3 active:border-t-[#404040] active:border-l-[#404040] active:border-b-[#dfdfdf] active:border-r-[#dfdfdf]"}
         >
-          X
+          [X]
         </button>
       </div>
     );
   }
 
-  // CONNECT BUTTON
+  // 4. DISCONNECTED
   return (
-    <button
-      onClick={connect}
-      disabled={connecting}
-      className="
-        flex items-center gap-2 px-4 py-2
-        bg-black border-4 border-yellow-400
-        text-yellow-400 font-mono uppercase
-        hover:bg-yellow-400 hover:text-black
-        disabled:opacity-50 disabled:cursor-not-allowed
-      "
+    <button 
+      onClick={connect} 
+      className={baseStyle + " min-w-[160px] active:border-t-[#404040] active:border-l-[#404040] active:border-b-[#dfdfdf] active:border-r-[#dfdfdf]"}
     >
-      {connecting ? (
-        <>
-          <span className="animate-pulse">CONNECTING</span>
-        </>
-      ) : (
-        <>
-          <svg className="w-4 h-4" viewBox="0 0 40 40" fill="currentColor">
-            <path d="M34.8 19.6h-3.5c0-7.1-5.8-12.9-13-12.9-7 0-12.8 5.5-13 12.5-.2 7.2 6.4 13.2 13.2 13.2h1.2c6.4 0 15.1-6.3 15.1-12.8z"/>
-          </svg>
-          CONNECT
-        </>
-      )}
+      Connect
     </button>
   );
 }

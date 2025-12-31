@@ -57,128 +57,163 @@ export function HorseCard({
   return (
     <div
       className={`
-        relative bg-black border-4 border-[#555]
-        font-mono uppercase tracking-tight
+        relative font-mono uppercase tracking-tight
+        bg-[#c0c0c0] p-1
+        border-2 border-t-[#dfdfdf] border-l-[#dfdfdf]
+        border-b-[#404040] border-r-[#404040]
         ${disabled ? 'opacity-50 pointer-events-none' : ''}
-        ${isWinner ? 'shadow-[0_0_20px_rgba(255,215,0,0.4)]' : ''}
       `}
     >
-      {/* CRT scanlines */}
-      <div className="absolute inset-0 pointer-events-none opacity-10 bg-[linear-gradient(rgba(0,0,0,0)_50%,rgba(0,0,0,0.35)_50%)] bg-[length:100%_4px]" />
+      <div
+        className="
+          relative bg-black p-3
+          border-2 border-t-[#404040] border-l-[#404040]
+          border-b-[#dfdfdf] border-r-[#dfdfdf]
+        "
+      >
+        {/* CRT scanlines */}
+        <div
+          className="
+            absolute inset-0 pointer-events-none opacity-10
+            bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%)]
+            bg-[length:100%_2px]
+          "
+        />
 
-      {/* WINNER BADGE */}
-      {isWinner && (
-        <div className="absolute -top-4 -right-4 bg-yellow-500 text-black px-2 py-1 text-xs border-2 border-black shadow z-10">
-          WINNER
-        </div>
-      )}
-
-      <div className="relative p-4 space-y-4">
-        {/* HEADER - Fixed spacing using invisible class */}
-        <div className="flex justify-between items-start">
-          <div className="pr-2">
-            <div className="text-[#1aff00] text-lg leading-tight break-all">
-              {horse.name}
-            </div>
-          </div>
-
-          <div 
-            className={`text-right transition-opacity ${!hasValidOdds ? 'invisible' : 'visible'}`}
-            aria-hidden={!hasValidOdds}
-          >
-            <div className="text-yellow-400 text-2xl leading-none">
-              {horse.odds}x
-            </div>
-            <div className="text-[10px] text-yellow-300 opacity-70">
-              ODDS
-            </div>
-          </div>
-        </div>
-
-        {/* STATS */}
-        <div className="grid grid-cols-2 gap-2 text-xs">
-          <div className="border-2 border-[#333] p-2 bg-[#050505]">
-            <div className="text-[#7CFF7C] opacity-70">TOTAL</div>
-            <div className="text-[#1aff00]">
-              {horse.totalBets?.toFixed(3) ?? '0.000'}
-            </div>
-          </div>
-
-          <div className="border-2 border-[#333] p-2 bg-[#050505]">
-            <div className="text-[#7CFF7C] opacity-70">POOL</div>
-            <div className="text-[#1aff00]">
-              {(horse as any).percentage ?? '0'}%
-            </div>
-          </div>
-        </div>
-
-        {/* WALLET */}
-        <div>
-          <div className="text-[10px] text-[#7CFF7C] mb-1">
-            DEPOSIT ADDRESS
-          </div>
-          <button
-            onClick={copyAddress}
-            className="w-full border-2 border-[#333] bg-black p-2 flex justify-between items-center hover:bg-[#050505]"
-          >
-            <code className="text-[10px] text-[#1aff00] truncate mr-2">
-              {horse.wallet_address}
-            </code>
-            <span className="text-[10px] text-yellow-400 whitespace-nowrap">
-              {copied ? 'COPIED' : 'COPY'}
-            </span>
-          </button>
-        </div>
-
-        {/* QUICK BETS */}
-        <div className="flex gap-1">
-          {QUICK_AMOUNTS.map(amt => {
-            const active = amount === amt.toString();
-            return (
-              <button
-                key={amt}
-                onClick={() => setAmount(amt.toString())}
-                className={`
-                  flex-1 py-2 text-xs border-2 transition-colors
-                  ${active
-                    ? 'bg-[#1aff00] text-black border-black'
-                    : 'bg-black text-[#7CFF7C] border-[#333] hover:bg-[#050505]'}
-                `}
-              >
-                {amt}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* BET INPUT */}
-        <div className="flex gap-2">
-          <div className="flex-1 relative">
-            <input
-              type="text"
-              inputMode="decimal"
-              value={amount}
-              onChange={e => handleAmountChange(e.target.value)}
-              className="w-full bg-black border-2 border-[#333] px-3 py-2 text-[#1aff00] text-sm focus:outline-none focus:border-[#1aff00]"
-            />
-            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-[#7CFF7C]">
-              SOL
-            </span>
-          </div>
-
-          <button
-            onClick={handleBet}
-            disabled={betting || disabled}
+        {/* WINNER BADGE */}
+        {isWinner && (
+          <div
             className="
-              px-4 border-2 border-yellow-400
-              bg-yellow-500 text-black font-bold
-              hover:bg-yellow-400 active:scale-95
-              disabled:opacity-50 disabled:active:scale-100
-              transition-all
+              absolute -top-4 -right-4 z-10
+              bg-yellow-400 text-black
+              px-2 py-1 text-[10px] font-bold
+              border-2 border-black
             "
           >
-            {betting ? '...' : 'BET'}
-          </button>
+            WINNER
+          </div>
+        )}
+
+        <div className="relative z-10 space-y-3">
+          {/* HEADER */}
+          <div className="flex justify-between items-start">
+            <div className="pr-2">
+              <div className="text-[#1aff00] text-base leading-tight break-all">
+                {horse.name}
+              </div>
+            </div>
+
+            <div
+              className={`text-right ${!hasValidOdds ? 'invisible' : ''}`}
+              aria-hidden={!hasValidOdds}
+            >
+              <div className="text-yellow-400 text-xl leading-none font-black">
+                {horse.odds}x
+              </div>
+              <div className="text-[10px] text-yellow-300 opacity-70">
+                ODDS
+              </div>
+            </div>
+          </div>
+
+          {/* STATS */}
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="border-2 border-[#333] p-2 bg-black">
+              <div className="text-[#7CFF7C] opacity-70">TOTAL</div>
+              <div className="text-[#1aff00]">
+                {horse.totalBets?.toFixed(3) ?? '0.000'}
+              </div>
+            </div>
+
+            <div className="border-2 border-[#333] p-2 bg-black">
+              <div className="text-[#7CFF7C] opacity-70">POOL</div>
+              <div className="text-[#1aff00]">
+                {(horse as any).percentage ?? '0'}%
+              </div>
+            </div>
+          </div>
+
+          {/* WALLET */}
+          <div>
+            <div className="text-[10px] text-[#7CFF7C] mb-1">
+              DEPOSIT ADDRESS
+            </div>
+            <button
+              onClick={copyAddress}
+              className="
+                w-full border-2 border-[#333] bg-black
+                p-2 flex justify-between items-center
+                hover:bg-[#050505]
+              "
+            >
+              <code className="text-[10px] text-[#1aff00] truncate mr-2">
+                {horse.wallet_address}
+              </code>
+              <span className="text-[10px] text-yellow-400">
+                {copied ? 'COPIED' : 'COPY'}
+              </span>
+            </button>
+          </div>
+
+          {/* QUICK BETS */}
+          <div className="flex gap-1">
+            {QUICK_AMOUNTS.map(amt => {
+              const active = amount === amt.toString();
+              return (
+                <button
+                  key={amt}
+                  onClick={() => setAmount(amt.toString())}
+                  className={`
+                    flex-1 py-2 text-xs font-bold
+                    border-2 transition-colors
+                    ${
+                      active
+                        ? 'bg-[#1aff00] text-black border-black'
+                        : 'bg-black text-[#7CFF7C] border-[#333] hover:bg-[#050505]'
+                    }
+                  `}
+                >
+                  {amt}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* BET INPUT */}
+          <div className="flex gap-2">
+            <div className="flex-1 relative">
+              <input
+                type="text"
+                inputMode="decimal"
+                value={amount}
+                onChange={e => handleAmountChange(e.target.value)}
+                className="
+                  w-full bg-black border-2 border-[#333]
+                  px-3 py-2 text-[#1aff00] text-sm
+                  focus:outline-none focus:border-[#1aff00]
+                "
+              />
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-[#7CFF7C]">
+                SOL
+              </span>
+            </div>
+
+            <button
+              onClick={handleBet}
+              disabled={betting || disabled}
+              className="
+                px-4 font-black
+                border-2 border-yellow-400
+                bg-yellow-500 text-black
+                hover:bg-yellow-400
+                active:scale-95
+                disabled:opacity-50 disabled:active:scale-100
+                transition-all
+              "
+            >
+              {betting ? '...' : 'BET'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
