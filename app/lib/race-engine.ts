@@ -202,3 +202,66 @@ export async function startNewRace(): Promise<string | null> {
 
   return data.id;
 }
+
+// ─────────────────────────────────────────────
+// RECORD BET (IDEMPOTENT + SAFE)
+// ─────────────────────────────────────────────
+
+export async function recordBet(
+  raceId: string,
+  horseId: number,
+  bettorWallet: string,
+  amount: number,
+  txSignature: string
+): Promise<boolean> {
+  const supabase = createServerSupabaseClient();
+
+  try {
+    // 1️⃣ Verify race is open for betting
+    const { data: race } = await supabase
+      .from('races')
+      .select('status, betting_ends_at')
+      .eq('id', raceId)
+      .single();
+
+    if (!race || race.status !== 'betting') return false;
+    if (new Date(race.betting_ends_at) <= new Date()) return false;
+
+    // 2️⃣ Enforce tx replay protection
+    const { data: existing } = await supabase
+      .from('bets')
+      .select('id')
+      .eq('tx_signature', txSignature)
+      .maybeSingle();
+
+    if (existing) {
+      // already recorded — idempotent success
+      return true;
+    }
+
+    // 3️⃣ Insert bet
+    const { error: betError } = await supabase
+      .from('bets')
+      .insert({
+        race_id: raceId,
+        horse_id: horseId,
+        bettor_wallet: bettorWallet,
+        amount,
+        tx_signature: txSignature,
+        status: 'confirmed',
+      });
+
+    if (betError) throw betError;
+
+    // 4️⃣ Update race total pool
+    await supabase.rpc('increment_race_pool', {
+      race_id_input: raceId,
+      amount_input: amount,
+    });
+
+    return true;
+  } catch (err) {
+    console.error('[recordBet]', err);
+    return false;
+  }
+}
