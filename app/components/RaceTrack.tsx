@@ -131,8 +131,14 @@ export function RaceTrack({
                       <span className={`text-3xl ${internalRacing ? 'animate-gallop' : ''} ${isWinner ? 'drop-shadow-[0_0_10px_#fff]' : ''}`}>
                         🏇
                       </span>
-                      <div className={`text-[9px] px-1 border mt-[-4px] whitespace-nowrap ${isWinner ? 'bg-[#1aff00] text-black border-white animate-pulse' : 'bg-black text-[#1aff00] border-[#1aff00]/30'}`}>
-                        {horse.name} {isWinner ? 'WINNER' : ''}
+                      <div
+                        className={`text-[9px] px-1 border mt-[-4px] whitespace-nowrap ${
+                            isWinner
+                            ? 'bg-[#1aff00] text-black border-white animate-pulse'
+                            : 'bg-black text-[#1aff00] border-[#1aff00]/30'
+                        }`}
+                        >
+                        {isWinner ? 'WINNER' : horse.name}
                       </div>
                     </div>
                   </div>
