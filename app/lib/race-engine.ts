@@ -4,7 +4,7 @@ import { sendPayout, aggregateFunds } from './solana';
 import type { Bet, RaceResult } from '../types';
 
 const HOUSE_FEE_PERCENT = 5;
-const RACE_DURATION_MS = 1 * 60 * 1000; // 5 minutes betting
+const RACE_DURATION_MS = 5 * 60 * 1000; // 5 minutes betting
 
 // ─────────────────────────────────────────────
 // PURE LOGIC
