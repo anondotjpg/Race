@@ -157,7 +157,7 @@ export default function Home() {
         
         <div className="flex flex-col lg:flex-row gap-4 items-stretch">
           <div className={`lg:w-1/3 flex ${isVisualizing ? "opacity-20 grayscale pointer-events-none transition-all" : "transition-all"}`}>
-            <div className="w-full flex flex-col h-full">
+            <div className="w-full flex flex-col h-32 md:h-full">
                <CountdownTimer seconds={timeRemaining} totalPool={totalPool} />
             </div>
           </div>
