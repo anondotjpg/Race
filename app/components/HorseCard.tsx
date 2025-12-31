@@ -53,6 +53,11 @@ export function HorseCard({
   };
 
   const hasValidOdds = horse.odds && Number(horse.odds) > 0;
+  
+  // NEW: Calculate probability percentage (1/odds * 100)
+  const winProbability = hasValidOdds 
+    ? (1 / Number(horse.odds) * 100).toFixed(1) 
+    : '0';
 
   return (
     <div
@@ -112,12 +117,13 @@ export function HorseCard({
               className={`text-right ${!hasValidOdds ? 'invisible' : ''}`}
               aria-hidden={!hasValidOdds}
             >
+              {/* Multiplier */}
               <div className="text-yellow-400 text-xl leading-none font-black">
                 {horse.odds}x
               </div>
-              {/* UPDATED LABEL */}
-              <div className="text-[10px] text-yellow-300 opacity-70">
-                PROB
+              {/* NEW: % Probability right under the multiplier */}
+              <div className="text-[#464646] text-xs leading-tight font-bold">
+                {winProbability}%
               </div>
             </div>
           </div>
