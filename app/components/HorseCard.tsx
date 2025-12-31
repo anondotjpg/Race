@@ -69,7 +69,7 @@ export function HorseCard({
       {/* WINNER BADGE */}
       {isWinner && (
         <div className="absolute -top-4 -right-4 bg-yellow-500 text-black px-2 py-1 text-xs border-2 border-black shadow">
-          👑 WINNER
+          WINNER
         </div>
       )}
 
