@@ -30,7 +30,7 @@ export const metadata: Metadata = {
     "web3",
   ],
   openGraph: {
-    title: "Solana Derby",
+    title: "Degen Derby",
     description: "On-chain horse racing terminal",
     type: "website",
   },
