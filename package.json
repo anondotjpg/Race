@@ -9,6 +9,9 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@solana/web3.js": "^1.95.0",
+    "@supabase/supabase-js": "^2.45.0",
+    "bs58": "^6.0.0",
     "next": "16.1.1",
     "react": "19.2.3",
     "react-dom": "19.2.3"
