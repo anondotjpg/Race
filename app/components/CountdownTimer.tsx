@@ -30,8 +30,12 @@ export function CountdownTimer({ seconds, totalPool, onRaceEnd }: CountdownTimer
         
         if (next === 0 && prev > 0 && !triggeredRef.current) {
           triggeredRef.current = true;
-          fetch('/api/cron', { cache: 'no-store' })
-            .finally(() => onRaceEnd?.());
+          
+          // Wait 2 seconds then trigger cron
+          setTimeout(() => {
+            fetch('/api/cron', { cache: 'no-store' })
+              .finally(() => onRaceEnd?.());
+          }, 2000);
         }
         
         return next;
