@@ -148,7 +148,7 @@ export default function Home() {
               href="https://x.com/derbydegen/status/2006466176797520034"
               target="_blank"
               rel="noopener noreferrer"
-              className="hover:opacity-70 transition-opacity"
+              className="hover:opacity-70 transition-opacity invisible md:visible"
             >
               <p className="text-base normal-case">[ how it works ]</p>
             </a>
@@ -207,7 +207,7 @@ export default function Home() {
         </div>
 
         <footer className="text-center py-6 text-[10px] text-[#7CFF7C]">
-          BUILT ON SOLANA • ON-CHAIN HORSE RACES
+          BUILT ON SOLANA • ON-CHAIN HORSE RACES • DIRECT DEPOSIT MAY TAKE A MOMENT TO REGISTER IN UI
         </footer>
       </main>
 
