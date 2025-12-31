@@ -12,6 +12,7 @@ interface GameState {
   racePositions: number[];
   lastResult: RaceResult | null;
   totalPool: number;
+  recentBets: any[];
   loading: boolean;
   error: string | null;
 }
@@ -25,6 +26,7 @@ export function useGameState() {
     racePositions: [],
     lastResult: null,
     totalPool: 0,
+    recentBets: [],
     loading: true,
     error: null
   });
@@ -114,6 +116,23 @@ export function useGameState() {
     }
   }, []);
 
+  // Fetch recent bets
+  const fetchBets = useCallback(async (raceId: string) => {
+    try {
+      const res = await fetch(`/api/bet?raceId=${raceId}`);
+      const data = await res.json();
+      
+      if (data.bets) {
+        setState(prev => ({
+          ...prev,
+          recentBets: data.bets.slice(0, 20) // Last 20 bets
+        }));
+      }
+    } catch (error) {
+      console.error('Failed to fetch bets:', error);
+    }
+  }, []);
+
   // Update countdown timer (display only)
   useEffect(() => {
     if (!state.currentRace || state.currentRace.status !== 'betting') return;
@@ -189,7 +208,10 @@ export function useGameState() {
         { event: 'INSERT', schema: 'public', table: 'bets' },
         () => {
           const race = currentRaceRef.current;
-          if (race) fetchHorses(race.id);
+          if (race) {
+            fetchHorses(race.id);
+            fetchBets(race.id);
+          }
         }
       )
       .subscribe((status) => {
@@ -202,18 +224,19 @@ export function useGameState() {
         clearTimeout(raceAnimationTimeout.current);
       }
     };
-  }, [fetchHorses]);
+  }, [fetchHorses, fetchBets]);
 
   // Initial load
   useEffect(() => {
     fetchRace().then(race => {
       if (race) {
         fetchHorses(race.id);
+        fetchBets(race.id);
       } else {
         fetchHorses();
       }
     });
-  }, [fetchRace, fetchHorses]);
+  }, [fetchRace, fetchHorses, fetchBets]);
 
   // Poll for updates every 5 seconds
   useEffect(() => {
@@ -221,11 +244,12 @@ export function useGameState() {
       fetchRace();
       if (state.currentRace && state.currentRace.status === 'betting') {
         fetchHorses(state.currentRace.id);
+        fetchBets(state.currentRace.id);
       }
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [state.currentRace?.id, state.currentRace?.status, fetchRace, fetchHorses]);
+  }, [state.currentRace?.id, state.currentRace?.status, fetchRace, fetchHorses, fetchBets]);
 
   return {
     ...state,

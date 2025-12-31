@@ -8,6 +8,7 @@ import { HorseCard } from './components/HorseCard';
 import { CountdownTimer } from './components/CountdownTimer';
 import { WalletConnect } from './components/WalletConnect';
 import { ResultsModal } from './components/ResultsModal';
+import { BetMarquee } from './components/BetMarquee';
 
 export default function Home() {
   const { 
@@ -18,6 +19,7 @@ export default function Home() {
     lastResult, 
     totalPool,
     racePositions,
+    recentBets,
     loading 
   } = useGameState();
   
@@ -28,13 +30,21 @@ export default function Home() {
   const [betSuccess, setBetSuccess] = useState<string | null>(null);
   const [lastShownResultId, setLastShownResultId] = useState<string | null>(null);
 
+  // Debug: log when lastResult changes
+  useEffect(() => {
+    console.log('lastResult changed:', lastResult);
+    console.log('isRacing:', isRacing);
+    console.log('showResults:', showResults);
+  }, [lastResult, isRacing, showResults]);
+
   // Show results modal when race finishes
   useEffect(() => {
     if (lastResult && !isRacing && lastResult.raceId !== lastShownResultId) {
+      console.log('Triggering results modal for race:', lastResult.raceId);
       const timer = setTimeout(() => {
         setShowResults(true);
         setLastShownResultId(lastResult.raceId);
-      }, 1000);
+      }, 500); // Reduced delay
       return () => clearTimeout(timer);
     }
   }, [lastResult, isRacing, lastShownResultId]);
@@ -178,6 +188,9 @@ export default function Home() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                <span className="text-xl">🏇</span>
+              </div>
               <div>
                 <h1 className="text-xl font-bold text-gray-900">Solana Derby</h1>
                 {currentRace && (
@@ -206,18 +219,11 @@ export default function Home() {
           </div>
         )}
 
-        {/* Timer & Stats Bar */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {/* Timer & Live Bets Marquee */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <CountdownTimer seconds={timeRemaining} totalPool={totalPool} />
-          
-          <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
-            <p className="text-xs text-gray-500 mb-1">Total Pool</p>
-            <p className="text-2xl font-bold text-gray-900">{totalPool.toFixed(3)} <span className="text-base font-normal text-gray-400">SOL</span></p>
-          </div>
-          
-          <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
-            <p className="text-xs text-gray-500 mb-1">Horses</p>
-            <p className="text-2xl font-bold text-gray-900">{horses.length} <span className="text-base font-normal text-gray-400">competing</span></p>
+          <div className="lg:col-span-2">
+            <BetMarquee bets={recentBets} horses={horses} />
           </div>
         </div>
 
@@ -238,7 +244,7 @@ export default function Home() {
             </p>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {horses.map((horse) => (
               <HorseCard
                 key={horse.id}
