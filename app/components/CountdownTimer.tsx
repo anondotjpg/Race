@@ -8,37 +8,49 @@ interface CountdownTimerProps {
 }
 
 export function CountdownTimer({ seconds }: CountdownTimerProps) {
-  // Clamp incoming value (server truth)
+  // Server-authoritative value
   const safeSeconds = Math.max(0, Math.floor(seconds));
 
-  // Local visual timer (smooth)
+  // Visual countdown
   const [displaySeconds, setDisplaySeconds] = useState(safeSeconds);
+
   const lastServerSeconds = useRef(safeSeconds);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // ─────────────────────────────────────────────
-  // Smooth sync to server time
+  // Sync from server → UI (snap forward, clamp back)
   // ─────────────────────────────────────────────
   useEffect(() => {
-    // If server jumps forward (new race), snap immediately
+    // New race or server jump forward → snap
     if (safeSeconds > lastServerSeconds.current) {
       setDisplaySeconds(safeSeconds);
     }
 
+    // Server correction backward → clamp
+    if (safeSeconds < displaySeconds) {
+      setDisplaySeconds(safeSeconds);
+    }
+
     lastServerSeconds.current = safeSeconds;
-  }, [safeSeconds]);
+  }, [safeSeconds, displaySeconds]);
 
   // ─────────────────────────────────────────────
-  // Local ticking (smooth 1s decrement)
+  // Single ticking interval (NEVER recreated)
   // ─────────────────────────────────────────────
   useEffect(() => {
-    if (displaySeconds <= 0) return;
+    if (intervalRef.current) return;
 
-    const id = setInterval(() => {
-      setDisplaySeconds(prev => Math.max(0, prev - 1));
+    intervalRef.current = setInterval(() => {
+      setDisplaySeconds(prev => (prev > 0 ? prev - 1 : 0));
     }, 1000);
 
-    return () => clearInterval(id);
-  }, [displaySeconds]);
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+  }, []);
 
   const minutes = Math.floor(displaySeconds / 60);
   const secs = displaySeconds % 60;
@@ -60,7 +72,7 @@ export function CountdownTimer({ seconds }: CountdownTimerProps) {
         }
       `}
     >
-      {/* Critical pulse overlay */}
+      {/* Critical pulse */}
       {isCritical && (
         <div className="absolute inset-0 bg-red-100/40 animate-pulse pointer-events-none" />
       )}
