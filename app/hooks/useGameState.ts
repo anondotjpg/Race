@@ -7,7 +7,6 @@ import type { Race, Bet, HorseWithOdds, RaceResult } from '../types';
 interface GameState {
   currentRace: Race | null;
   horses: HorseWithOdds[];
-  bets: Bet[];
   timeRemaining: number;
   isRacing: boolean;
   racePositions: number[];
@@ -17,216 +16,227 @@ interface GameState {
   error: string | null;
 }
 
-function asNumberId(v: unknown): number {
-  const n = typeof v === 'number' ? v : Number(v);
-  return Number.isFinite(n) ? n : 0;
-}
-
-function asStringId(v: unknown): string {
-  return v == null ? '' : String(v);
-}
-
-function buildRaceResult(args: {
-  race: Race;
-  horses: HorseWithOdds[];
-}): RaceResult | null {
-  if (!args.race.winning_horse_id) return null;
-
-  const winnerId = asNumberId(args.race.winning_horse_id);
-  const winnerName =
-    args.horses.find(h => asNumberId(h.id) === winnerId)?.name ?? 'Unknown';
-
-  return {
-    raceId: args.race.id,
-    winningHorseId: winnerId,
-    winningHorseName: winnerName,
-    positions: args.race.final_positions ?? [],
-    payouts: [], // payouts are informational only here
-  };
-}
-
 export function useGameState() {
   const [state, setState] = useState<GameState>({
     currentRace: null,
     horses: [],
-    bets: [],
     timeRemaining: 0,
     isRacing: false,
     racePositions: [],
     lastResult: null,
     totalPool: 0,
     loading: true,
-    error: null,
+    error: null
   });
 
   const currentRaceRef = useRef<Race | null>(null);
-  const horsesRef = useRef<HorseWithOdds[]>([]);
+  const raceAnimationTimeout = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     currentRaceRef.current = state.currentRace;
   }, [state.currentRace]);
 
-  useEffect(() => {
-    horsesRef.current = state.horses;
-  }, [state.horses]);
-
-  // ─────────────────────────────────────────────
-  // Fetch current race (READ ONLY)
-  // ─────────────────────────────────────────────
+  // Fetch current race
   const fetchRace = useCallback(async () => {
     try {
       const res = await fetch('/api/race');
       const data = await res.json();
 
-      if (!data?.race) return null;
+      if (data.race) {
+        const race = data.race as Race;
+        
+        setState(prev => {
+          // If race changed to 'racing', start animation
+          if (race.status === 'racing' && prev.currentRace?.status !== 'racing') {
+            // Clear any existing timeout
+            if (raceAnimationTimeout.current) {
+              clearTimeout(raceAnimationTimeout.current);
+            }
+            
+            // Set isRacing immediately, positions will come from race data
+            return {
+              ...prev,
+              currentRace: race,
+              isRacing: true,
+              racePositions: race.final_positions || [],
+              lastResult: null
+            };
+          }
+          
+          // If race is finished
+          if (race.status === 'finished' && race.winning_horse_id) {
+            return {
+              ...prev,
+              currentRace: race,
+              racePositions: race.final_positions || [],
+              // Don't set lastResult here - wait for animation
+            };
+          }
+          
+          // Normal betting state
+          return {
+            ...prev,
+            currentRace: race,
+            isRacing: race.status === 'racing'
+          };
+        });
 
-      const race: Race = data.race;
-
-      setState(prev => ({
-        ...prev,
-        currentRace: race,
-        isRacing: race.status === 'racing',
-      }));
-
-      return race;
-    } catch {
+        return race;
+      }
+    } catch (error) {
+      console.error('Failed to fetch race:', error);
       setState(prev => ({ ...prev, error: 'Failed to load race' }));
-      return null;
     }
+    return null;
   }, []);
 
-  // ─────────────────────────────────────────────
-  // Fetch horses + odds
-  // ─────────────────────────────────────────────
+  // Fetch horses with odds
   const fetchHorses = useCallback(async (raceId?: string) => {
     try {
       const url = raceId ? `/api/horses?raceId=${raceId}` : '/api/horses';
       const res = await fetch(url);
       const data = await res.json();
 
-      if (!data?.horses) return;
-
-      setState(prev => ({
-        ...prev,
-        horses: data.horses.map((h: any, i: number) => ({
-          ...h,
-          position: i + 1,
-          progress: 0,
-        })),
-        totalPool: data.totalPool ?? 0,
-        loading: false,
-      }));
-    } catch {}
+      if (data.horses) {
+        setState(prev => ({
+          ...prev,
+          horses: data.horses.map((h: any, i: number) => ({
+            ...h,
+            position: i + 1,
+            progress: 0
+          })),
+          totalPool: data.totalPool || 0,
+          loading: false
+        }));
+      }
+    } catch (error) {
+      console.error('Failed to fetch horses:', error);
+    }
   }, []);
 
-  // ─────────────────────────────────────────────
-  // Countdown (READ ONLY)
-  // ─────────────────────────────────────────────
+  // Update countdown timer (display only)
   useEffect(() => {
-    const race = state.currentRace;
-    if (!race || race.status !== 'betting') return;
+    if (!state.currentRace || state.currentRace.status !== 'betting') return;
 
-    const tick = () => {
-      const end = new Date(race.betting_ends_at).getTime();
+    const updateTimer = () => {
+      const endTime = new Date(state.currentRace!.betting_ends_at).getTime();
       const now = Date.now();
-      const remaining = Math.max(0, Math.floor((end - now) / 1000));
-
+      const remaining = Math.max(0, Math.floor((endTime - now) / 1000));
       setState(prev => ({ ...prev, timeRemaining: remaining }));
     };
 
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
   }, [state.currentRace]);
 
-  // ─────────────────────────────────────────────
-  // REALTIME — SINGLE SOURCE OF TRUTH
-  // ─────────────────────────────────────────────
+  // Subscribe to realtime updates
   useEffect(() => {
     const channel = supabase
       .channel('game-updates')
-
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'races' },
-        payload => {
-          if (!payload.new) return;
-          const race = payload.new as Race;
+        (payload) => {
+          if (payload.new) {
+            const newRace = payload.new as Race;
+            console.log('Race update:', newRace.status, newRace.id);
 
-          setState(prev => ({
-            ...prev,
-            currentRace: race,
-            isRacing: race.status === 'racing',
-          }));
-
-          if (race.status === 'finished') {
-            const result = buildRaceResult({
-              race,
-              horses: horsesRef.current,
-            });
-
-            if (result) {
+            if (newRace.status === 'racing') {
+              // Race started - trigger animation
               setState(prev => ({
                 ...prev,
-                racePositions: result.positions,
+                currentRace: newRace,
+                isRacing: true,
+                racePositions: newRace.final_positions || [],
+                lastResult: null
+              }));
+            } else if (newRace.status === 'finished' && newRace.winning_horse_id) {
+              // Race finished - update positions, wait for animation
+              setState(prev => ({
+                ...prev,
+                currentRace: newRace,
+                racePositions: newRace.final_positions || []
               }));
 
-              setTimeout(() => {
+              // After 10s animation, show winner
+              if (raceAnimationTimeout.current) {
+                clearTimeout(raceAnimationTimeout.current);
+              }
+              
+              raceAnimationTimeout.current = setTimeout(() => {
                 setState(prev => ({
                   ...prev,
                   isRacing: false,
-                  lastResult: result,
+                  lastResult: {
+                    raceId: newRace.id,
+                    winningHorseId: newRace.winning_horse_id!,
+                    winningHorseName: (newRace as any).winning_horse_name || 'Unknown',
+                    positions: newRace.final_positions || [],
+                    payouts: []
+                  }
                 }));
-              }, 10_000);
+              }, 10000);
+            } else if (newRace.status === 'betting') {
+              // New race started
+              setState(prev => ({
+                ...prev,
+                currentRace: newRace,
+                isRacing: false,
+                lastResult: null,
+                racePositions: []
+              }));
+              fetchHorses(newRace.id);
             }
-
-            setTimeout(() => {
-              fetchRace().then(r => {
-                if (r) fetchHorses(asStringId(r.id));
-              });
-            }, 30_000);
-          }
-
-          if (race.status === 'betting') {
-            setState(prev => ({
-              ...prev,
-              lastResult: null,
-              racePositions: [],
-            }));
-            fetchHorses(asStringId(race.id));
           }
         }
       )
-
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'bets' },
         () => {
           const race = currentRaceRef.current;
-          if (race) fetchHorses(asStringId(race.id));
+          if (race) fetchHorses(race.id);
         }
       )
-
-      .subscribe();
+      .subscribe((status) => {
+        console.log('Realtime subscription:', status);
+      });
 
     return () => {
       supabase.removeChannel(channel);
+      if (raceAnimationTimeout.current) {
+        clearTimeout(raceAnimationTimeout.current);
+      }
     };
-  }, [fetchHorses, fetchRace]);
+  }, [fetchHorses]);
 
-  // ─────────────────────────────────────────────
   // Initial load
-  // ─────────────────────────────────────────────
   useEffect(() => {
-    fetchRace().then(r => {
-      if (r) fetchHorses(asStringId(r.id));
-      else fetchHorses();
+    fetchRace().then(race => {
+      if (race) {
+        fetchHorses(race.id);
+      } else {
+        fetchHorses();
+      }
     });
   }, [fetchRace, fetchHorses]);
+
+  // Poll for updates every 5 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchRace();
+      if (state.currentRace && state.currentRace.status === 'betting') {
+        fetchHorses(state.currentRace.id);
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [state.currentRace?.id, state.currentRace?.status, fetchRace, fetchHorses]);
 
   return {
     ...state,
     refreshRace: fetchRace,
-    refreshHorses: fetchHorses,
+    refreshHorses: fetchHorses
   };
 }

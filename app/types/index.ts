@@ -16,11 +16,13 @@ export interface Race {
   race_number: number;
   status: 'betting' | 'racing' | 'finished';
   winning_horse_id: number | null;
+  winning_horse_name: string | null;
   final_positions: number[] | null;
   total_pool: number;
   started_at: string;
   betting_ends_at: string;
   finished_at: string | null;
+  updated_at: string;
   created_at: string;
 }
 

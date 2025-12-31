@@ -1,8 +1,9 @@
+// lib/race-engine.ts
 import { createServerSupabaseClient } from './supabase';
 import type { Bet, RaceResult } from '../types';
 
 const HOUSE_FEE_PERCENT = 5;
-const RACE_DURATION_MS = 5 * 60 * 1000;
+const RACE_DURATION_MS = 5 * 60 * 1000; // 5 minutes betting
 
 // ─────────────────────────────────────────────
 // PURE LOGIC
@@ -85,6 +86,7 @@ export async function executeRace(
 
   if (!race) return null;
 
+  // Already finished - return cached result
   if (race.status === 'finished') {
     return {
       raceId,
@@ -95,7 +97,7 @@ export async function executeRace(
     };
   }
 
-  // 🔐 lock or continue
+  // Lock race to 'racing' status
   const { data: locked } = await supabase
     .from('races')
     .update({
@@ -135,6 +137,7 @@ export async function executeRace(
 
   const payouts = calculatePayouts(winnerId, bets ?? []);
 
+  // Update race as finished
   await supabase
     .from('races')
     .update({
@@ -148,6 +151,7 @@ export async function executeRace(
     .eq('id', raceId)
     .eq('status', 'racing');
 
+  // Update bet statuses
   for (const bet of bets ?? []) {
     const payout = payouts.find(p => p.betId === bet.id)?.amount ?? 0;
 
@@ -161,6 +165,7 @@ export async function executeRace(
       .eq('status', 'confirmed');
   }
 
+  // Record payouts
   for (const p of payouts) {
     await supabase.from('payouts').insert({
       race_id: raceId,
@@ -191,6 +196,7 @@ export async function startNewRace(): Promise<string | null> {
   const supabase = createServerSupabaseClient();
   const now = Date.now();
 
+  // Check no active race
   const { data: active } = await supabase
     .from('races')
     .select('id')
@@ -216,7 +222,7 @@ export async function startNewRace(): Promise<string | null> {
 }
 
 // ─────────────────────────────────────────────
-// RECORD BET (THIS FIXES YOUR BUILD)
+// RECORD BET
 // ─────────────────────────────────────────────
 
 export async function recordBet(
@@ -237,6 +243,7 @@ export async function recordBet(
   if (!race || race.status !== 'betting') return false;
   if (new Date(race.betting_ends_at) <= new Date()) return false;
 
+  // Check for duplicate
   const { data: existing } = await supabase
     .from('bets')
     .select('id')
@@ -254,6 +261,7 @@ export async function recordBet(
     status: 'confirmed',
   });
 
+  // Increment pool (you need this SQL function in Supabase)
   await supabase.rpc('increment_race_pool', {
     race_id_input: raceId,
     amount_input: amount,
