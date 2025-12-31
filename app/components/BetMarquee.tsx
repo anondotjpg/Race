@@ -174,7 +174,7 @@ export function BetMarquee({ bets, horses }: BetMarqueeProps) {
               className="flex gap-3 will-change-transform"
               style={{ width: 'max-content' }}
             >
-              {[...Array(4)].map((_, groupIdx) =>
+              {[...Array(6)].map((_, groupIdx) =>
                 bets.map((bet, i) => (
                   <BetCard
                     key={`${groupIdx}-${bet.id}-${i}`}
