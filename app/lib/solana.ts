@@ -160,39 +160,65 @@ export async function sendPayout(
   }
 }
 
-// Verify a transaction exists and get amount
+// Verify a transaction exists and get amount (with retries)
 export async function verifyTransaction(
   signature: string,
   expectedRecipient: string
 ): Promise<{ valid: boolean; amount: number; sender: string }> {
-  try {
-    const tx = await connection.getTransaction(signature, {
-      maxSupportedTransactionVersion: 0
-    });
-    
-    if (!tx || !tx.meta) {
+  const MAX_RETRIES = 5;
+  const RETRY_DELAY_MS = 2000; // 2 seconds between retries
+  
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      console.log(`[verifyTransaction] Attempt ${attempt}/${MAX_RETRIES} for ${signature.slice(0, 20)}...`);
+      
+      const tx = await connection.getTransaction(signature, {
+        maxSupportedTransactionVersion: 0,
+        commitment: 'confirmed'
+      });
+      
+      if (!tx || !tx.meta) {
+        console.log(`[verifyTransaction] Transaction not found yet, attempt ${attempt}`);
+        
+        if (attempt < MAX_RETRIES) {
+          await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+          continue;
+        }
+        
+        return { valid: false, amount: 0, sender: '' };
+      }
+      
+      const accountKeys = tx.transaction.message.staticAccountKeys;
+      const recipientIndex = accountKeys?.findIndex(
+        key => key.toBase58() === expectedRecipient
+      );
+      
+      if (recipientIndex === undefined || recipientIndex === -1) {
+        console.log(`[verifyTransaction] Recipient not found in transaction`);
+        return { valid: false, amount: 0, sender: '' };
+      }
+      
+      const preBalance = tx.meta.preBalances[recipientIndex] || 0;
+      const postBalance = tx.meta.postBalances[recipientIndex] || 0;
+      const amount = (postBalance - preBalance) / LAMPORTS_PER_SOL;
+      const sender = accountKeys?.[0]?.toBase58() || '';
+      
+      console.log(`[verifyTransaction] Success! Amount: ${amount} SOL, Sender: ${sender.slice(0, 10)}...`);
+      
+      return { valid: amount > 0, amount, sender };
+    } catch (error) {
+      console.error(`[verifyTransaction] Error on attempt ${attempt}:`, error);
+      
+      if (attempt < MAX_RETRIES) {
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+        continue;
+      }
+      
       return { valid: false, amount: 0, sender: '' };
     }
-    
-    const accountKeys = tx.transaction.message.staticAccountKeys;
-    const recipientIndex = accountKeys?.findIndex(
-      key => key.toBase58() === expectedRecipient
-    );
-    
-    if (recipientIndex === undefined || recipientIndex === -1) {
-      return { valid: false, amount: 0, sender: '' };
-    }
-    
-    const preBalance = tx.meta.preBalances[recipientIndex] || 0;
-    const postBalance = tx.meta.postBalances[recipientIndex] || 0;
-    const amount = (postBalance - preBalance) / LAMPORTS_PER_SOL;
-    const sender = accountKeys?.[0]?.toBase58() || '';
-    
-    return { valid: amount > 0, amount, sender };
-  } catch (error) {
-    console.error('Transaction verification failed:', error);
-    return { valid: false, amount: 0, sender: '' };
   }
+  
+  return { valid: false, amount: 0, sender: '' };
 }
 
 // Aggregate all horse wallets into house wallet for payouts
