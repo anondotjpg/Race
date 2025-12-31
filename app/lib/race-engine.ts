@@ -5,7 +5,7 @@ const HOUSE_FEE_PERCENT = 5;
 const RACE_DURATION_MS = 5 * 60 * 1000;
 
 // ─────────────────────────────────────────────
-// WINNER LOGIC (PURE, CALLED ONCE)
+// PURE WINNER LOGIC (DETERMINISTIC PER EXECUTION)
 // ─────────────────────────────────────────────
 
 export function determineWinner(
@@ -69,7 +69,7 @@ export function calculatePayouts(
 }
 
 // ─────────────────────────────────────────────
-// EXECUTE RACE (ATOMIC, SINGLE-WINNER)
+// EXECUTE / FINALIZE RACE (IDEMPOTENT + SAFE)
 // ─────────────────────────────────────────────
 
 export async function executeRace(
@@ -86,7 +86,7 @@ export async function executeRace(
 
   if (!race) return null;
 
-  // 2️⃣ If already finished → RETURN IMMUTABLE RESULT
+  // 2️⃣ If already finished → return immutable result
   if (race.status === 'finished' && race.winning_horse_id) {
     return {
       raceId,
@@ -97,17 +97,25 @@ export async function executeRace(
     };
   }
 
-  // 3️⃣ ATOMIC LOCK (ONLY ONE CRON CAN PASS)
-  const { data: locked } = await supabase
-    .from('races')
-    .update({ status: 'racing' })
-    .eq('id', raceId)
-    .eq('status', 'betting')
-    .select('id')
-    .maybeSingle();
+  // 3️⃣ LOCK PHASE (only from betting)
+  if (race.status === 'betting') {
+    const { data: locked } = await supabase
+      .from('races')
+      .update({
+        status: 'racing',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', raceId)
+      .eq('status', 'betting')
+      .select('id')
+      .maybeSingle();
 
-  if (!locked) {
-    // Another cron already locked it
+    // Another cron locked it
+    if (!locked) return null;
+  }
+
+  // ⛔ If not racing at this point, do nothing
+  if (race.status !== 'racing' && race.status !== 'betting') {
     return null;
   }
 
@@ -119,7 +127,7 @@ export async function executeRace(
     .eq('race_id', raceId)
     .eq('status', 'confirmed');
 
-  if (!horses) return null;
+  if (!horses || horses.length === 0) return null;
 
   const horseTotals = horses.map(h => ({
     horseId: h.id,
@@ -139,7 +147,7 @@ export async function executeRace(
 
   const payouts = calculatePayouts(winnerId, bets ?? []);
 
-  // 6️⃣ FINALIZE RACE (IMMUTABLE WRITE)
+  // 6️⃣ FINALIZE RACE (IMMUTABLE)
   await supabase
     .from('races')
     .update({
@@ -148,8 +156,10 @@ export async function executeRace(
       winning_horse_name: winningHorse.name,
       final_positions: positions,
       finished_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     })
-    .eq('id', raceId);
+    .eq('id', raceId)
+    .eq('status', 'racing');
 
   // 7️⃣ Update bets
   for (const bet of bets ?? []) {
@@ -161,10 +171,11 @@ export async function executeRace(
         status: bet.horse_id === winnerId ? 'paid' : 'lost',
         payout,
       })
-      .eq('id', bet.id);
+      .eq('id', bet.id)
+      .eq('status', 'confirmed');
   }
 
-  // 8️⃣ Record payouts
+  // 8️⃣ Record payouts (idempotent-safe)
   for (const p of payouts) {
     await supabase.from('payouts').insert({
       race_id: raceId,
@@ -175,7 +186,7 @@ export async function executeRace(
     });
   }
 
-  // 9️⃣ RETURN STABLE RESULT
+  // 9️⃣ Return stable result
   return {
     raceId,
     winningHorseId: winnerId,
@@ -205,70 +216,16 @@ export async function startNewRace(): Promise<string | null> {
 
   if (recent) return null;
 
-  const bettingEndsAt = new Date(now + RACE_DURATION_MS);
-
   const { data } = await supabase
     .from('races')
     .insert({
       status: 'betting',
       started_at: new Date(now).toISOString(),
-      betting_ends_at: bettingEndsAt.toISOString(),
+      betting_ends_at: new Date(now + RACE_DURATION_MS).toISOString(),
       total_pool: 0,
     })
     .select('id')
     .single();
 
   return data?.id ?? null;
-}
-
-// ─────────────────────────────────────────────
-// RECORD BET (IDEMPOTENT)
-// ─────────────────────────────────────────────
-
-export async function recordBet(
-  raceId: string,
-  horseId: number,
-  bettorWallet: string,
-  amount: number,
-  txSignature: string
-): Promise<boolean> {
-  const supabase = createServerSupabaseClient();
-
-  try {
-    const { data: race } = await supabase
-      .from('races')
-      .select('status, betting_ends_at')
-      .eq('id', raceId)
-      .single();
-
-    if (!race || race.status !== 'betting') return false;
-    if (new Date(race.betting_ends_at) <= new Date()) return false;
-
-    const { data: existing } = await supabase
-      .from('bets')
-      .select('id')
-      .eq('tx_signature', txSignature)
-      .maybeSingle();
-
-    if (existing) return true;
-
-    await supabase.from('bets').insert({
-      race_id: raceId,
-      horse_id: horseId,
-      bettor_wallet: bettorWallet,
-      amount,
-      tx_signature: txSignature,
-      status: 'confirmed',
-    });
-
-    await supabase.rpc('increment_race_pool', {
-      race_id_input: raceId,
-      amount_input: amount,
-    });
-
-    return true;
-  } catch (err) {
-    console.error('[recordBet]', err);
-    return false;
-  }
 }
