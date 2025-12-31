@@ -229,7 +229,7 @@ export async function aggregateFunds(
   let totalCollected = 0;
   
   // Minimum balance to keep account rent-exempt (~0.00089 SOL) + tx fee
-  const MIN_BALANCE_LAMPORTS = 900000; // ~0.0009 SOL
+  const MIN_BALANCE_LAMPORTS = 1400000; // ~0.0009 SOL
   
   for (const privateKey of horsePrivateKeys) {
     try {
