@@ -4,45 +4,38 @@
 import { useWallet } from '../hooks/useWallet';
 
 export function WalletConnect() {
-  const { wallet, connected, connecting, error, hasProvider, connect, disconnect } = useWallet();
+  const { wallet, connected, connecting, hasProvider, connect, disconnect } = useWallet();
 
   if (!hasProvider) {
     return (
       <button
         onClick={() => window.open('https://phantom.app/', '_blank')}
-        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 transition-colors font-bold"
+        className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-violet-500 text-white text-sm font-medium rounded-xl hover:opacity-90 transition-opacity shadow-lg shadow-purple-500/20"
       >
-        <svg className="w-5 h-5" viewBox="0 0 128 128" fill="currentColor">
-          <circle cx="64" cy="64" r="64" fill="#AB9FF2"/>
-          <path d="M110.584 64.9142H99.142C99.142 41.7651 80.173 23 56.7724 23C33.6612 23 14.8716 41.3057 14.4118 64.0583C13.936 87.5106 35.5576 107 59.2202 107H63.3068C84.0829 107 110.584 86.4016 110.584 64.9142Z" fill="url(#paint0_linear)"/>
-          <path d="M77.5765 67.3193C77.5765 71.8041 74.0064 75.4458 69.6112 75.4458C65.216 75.4458 61.6459 71.8041 61.6459 67.3193C61.6459 62.8346 65.216 59.1929 69.6112 59.1929C74.0064 59.1929 77.5765 62.8346 77.5765 67.3193Z" fill="white"/>
-          <path d="M95.8426 67.3193C95.8426 71.8041 92.2725 75.4458 87.8773 75.4458C83.4821 75.4458 79.912 71.8041 79.912 67.3193C79.912 62.8346 83.4821 59.1929 87.8773 59.1929C92.2725 59.1929 95.8426 62.8346 95.8426 67.3193Z" fill="white"/>
-          <defs>
-            <linearGradient id="paint0_linear" x1="62.4982" y1="107" x2="62.4982" y2="23" gradientUnits="userSpaceOnUse">
-              <stop stopColor="#534BB1"/>
-              <stop offset="1" stopColor="#551BF9"/>
-            </linearGradient>
-          </defs>
+        <svg className="w-4 h-4" viewBox="0 0 40 40" fill="currentColor">
+          <path d="M34.8 19.6h-3.5c0-7.1-5.8-12.9-13-12.9-7 0-12.8 5.5-13 12.5-.2 7.2 6.4 13.2 13.2 13.2h1.2c6.4 0 15.1-6.3 15.1-12.8z"/>
         </svg>
-        Install Phantom
+        Get Phantom
       </button>
     );
   }
 
   if (connected && wallet) {
     return (
-      <div className="flex items-center gap-3">
-        <div className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl bg-white/5 border border-white/10">
-          <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span className="text-sm font-mono text-white/70">
+      <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 px-3 py-2 bg-gray-100 rounded-xl">
+          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+          <span className="text-sm text-gray-600 font-mono">
             {wallet.slice(0, 4)}...{wallet.slice(-4)}
           </span>
         </div>
         <button
           onClick={disconnect}
-          className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 transition-colors text-sm font-bold"
+          className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
         >
-          Disconnect
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+          </svg>
         </button>
       </div>
     );
@@ -52,26 +45,22 @@ export function WalletConnect() {
     <button
       onClick={connect}
       disabled={connecting}
-      className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 transition-all font-bold disabled:opacity-50"
+      className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded-xl hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
     >
       {connecting ? (
         <>
-          <span className="animate-spin">⟳</span>
-          Connecting...
+          <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+          <span>Connecting...</span>
         </>
       ) : (
         <>
-          <svg className="w-5 h-5" viewBox="0 0 128 128" fill="currentColor">
-            <circle cx="64" cy="64" r="64" fill="#AB9FF2"/>
-            <path d="M110.584 64.9142H99.142C99.142 41.7651 80.173 23 56.7724 23C33.6612 23 14.8716 41.3057 14.4118 64.0583C13.936 87.5106 35.5576 107 59.2202 107H63.3068C84.0829 107 110.584 86.4016 110.584 64.9142Z" fill="url(#paint0_linear_connect)"/>
-            <defs>
-              <linearGradient id="paint0_linear_connect" x1="62.4982" y1="107" x2="62.4982" y2="23" gradientUnits="userSpaceOnUse">
-                <stop stopColor="#534BB1"/>
-                <stop offset="1" stopColor="#551BF9"/>
-              </linearGradient>
-            </defs>
+          <svg className="w-4 h-4" viewBox="0 0 40 40" fill="currentColor">
+            <path d="M34.8 19.6h-3.5c0-7.1-5.8-12.9-13-12.9-7 0-12.8 5.5-13 12.5-.2 7.2 6.4 13.2 13.2 13.2h1.2c6.4 0 15.1-6.3 15.1-12.8z"/>
           </svg>
-          Connect Wallet
+          <span>Connect</span>
         </>
       )}
     </button>

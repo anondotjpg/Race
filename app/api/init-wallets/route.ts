@@ -4,7 +4,7 @@ import { createServerSupabaseClient } from '@/app/lib/supabase';
 import { createPumpPortalWallet } from '@/app/lib/solana';
 
 // This endpoint initializes horse wallets using PumpPortal
-// Should only be called once during initial setup
+// Can be run multiple times - will replace existing wallets
 // Protect this in production with auth!
 
 export async function POST(request: NextRequest) {
@@ -18,41 +18,63 @@ export async function POST(request: NextRequest) {
   }
   
   try {
-    // Get horses without wallets
+    // Get ALL horses
     const { data: horses, error } = await supabase
       .from('horses')
-      .select('*')
-      .or('wallet_address.eq.PLACEHOLDER_WALLET_1,wallet_address.eq.PLACEHOLDER_WALLET_2,wallet_address.eq.PLACEHOLDER_WALLET_3,wallet_address.eq.PLACEHOLDER_WALLET_4,wallet_address.eq.PLACEHOLDER_WALLET_5');
+      .select('*');
     
-    if (error) throw error;
+    console.log('Found horses to update:', horses?.length);
+    
+    if (error) {
+      console.error('Supabase error:', error);
+      throw error;
+    }
+    
+    if (!horses || horses.length === 0) {
+      return NextResponse.json({ 
+        message: 'No horses found in database.',
+        results: [] 
+      });
+    }
     
     const results = [];
     
-    for (const horse of horses || []) {
+    for (const horse of horses) {
       try {
-        // Create wallet via PumpPortal
+        console.log(`Creating wallet for ${horse.name}...`);
+        
+        // Create wallet via PumpPortal (falls back to local generation)
         const wallet = await createPumpPortalWallet();
         
-        // Update horse with real wallet
+        console.log(`Wallet created for ${horse.name}:`, wallet.publicKey);
+        
+        // Update horse with new wallet (replaces existing)
         const { error: updateError } = await supabase
           .from('horses')
           .update({
             wallet_address: wallet.publicKey,
-            wallet_private_key: wallet.privateKey, // Encrypt in production!
-            api_key: wallet.apiKey
+            wallet_private_key: wallet.privateKey,
+            api_key: wallet.apiKey || null
           })
           .eq('id', horse.id);
         
-        if (updateError) throw updateError;
+        if (updateError) {
+          console.error(`Update error for ${horse.name}:`, updateError);
+          throw updateError;
+        }
         
         results.push({
           horseName: horse.name,
+          horseId: horse.id,
           walletAddress: wallet.publicKey,
+          previousWallet: horse.wallet_address,
           success: true
         });
       } catch (walletError) {
+        console.error(`Wallet error for ${horse.name}:`, walletError);
         results.push({
           horseName: horse.name,
+          horseId: horse.id,
           success: false,
           error: String(walletError)
         });
@@ -62,6 +84,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ results });
   } catch (error) {
     console.error('Wallet init error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: 'Internal server error', details: String(error) }, { status: 500 });
   }
 }

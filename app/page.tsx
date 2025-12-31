@@ -77,7 +77,7 @@ export default function Home() {
         return;
       }
 
-      setBetSuccess(`Bet placed! ${amount} SOL on ${horse.name}`);
+      setBetSuccess(`${amount} SOL on ${horse.name}`);
       setTimeout(() => setBetSuccess(null), 5000);
     } catch (error: any) {
       setBetError(error.message || 'Bet failed');
@@ -94,157 +94,102 @@ export default function Home() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="text-6xl animate-bounce mb-4">🏇</div>
-          <div className="text-xl font-bold text-white/50 animate-pulse">
-            Loading Race...
-          </div>
+          <div className="w-12 h-12 border-4 border-gray-200 border-t-gray-900 rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-gray-500">Loading race...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-950 via-purple-950/20 to-gray-950 text-white">
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900/20 via-transparent to-transparent" />
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl animate-pulse" />
-        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
-      </div>
-
-      <header className="relative z-10 border-b border-white/10 bg-black/50 backdrop-blur-xl">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="text-4xl">🏇</span>
-            <div>
-              <h1 className="text-2xl font-black uppercase tracking-tight bg-gradient-to-r from-yellow-400 via-orange-500 to-red-500 bg-clip-text text-transparent">
-                Solana Derby
-              </h1>
-              <p className="text-xs text-white/40 uppercase tracking-widest">
-                Race Every 5 Minutes
-              </p>
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-4">
-            {currentRace && (
-              <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10">
-                <span className="text-xs text-white/40">Race</span>
-                <span className="font-mono font-bold">#{currentRace.race_number}</span>
+    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100">
+      {/* Header */}
+      <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-gray-200/50">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                <span className="text-xl">🏇</span>
               </div>
-            )}
+              <div>
+                <h1 className="text-xl font-bold text-gray-900">Solana Derby</h1>
+                {currentRace && (
+                  <p className="text-xs text-gray-500">Race #{currentRace.race_number}</p>
+                )}
+              </div>
+            </div>
             <WalletConnect />
           </div>
         </div>
       </header>
 
-      <main className="relative z-10 max-w-7xl mx-auto px-4 py-8">
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+        {/* Alerts */}
         {betError && (
-          <div className="mb-6 p-4 rounded-xl bg-red-500/20 border border-red-500/30 text-red-400 text-center font-bold animate-shake">
-            {betError}
+          <div className="p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3">
+            <span className="text-red-500">⚠️</span>
+            <p className="text-red-700 text-sm font-medium">{betError}</p>
           </div>
         )}
         
         {betSuccess && (
-          <div className="mb-6 p-4 rounded-xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-center font-bold">
-            ✓ {betSuccess}
+          <div className="p-4 bg-green-50 border border-green-200 rounded-xl flex items-center gap-3">
+            <span className="text-green-500">✓</span>
+            <p className="text-green-700 text-sm font-medium">Bet placed: {betSuccess}</p>
           </div>
         )}
 
-        <div className="mb-8">
-          <RaceTrack 
-            horses={horses} 
-            isRacing={isRacing}
-            winningHorseId={lastResult?.winningHorseId}
-            finalPositions={racePositions}
-          />
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">
-          <div className="lg:col-span-1">
-            <CountdownTimer 
-              seconds={timeRemaining} 
-              totalPool={totalPool}
-            />
-            
-            <div className="mt-6 p-4 rounded-xl bg-white/5 border border-white/10">
-              <h3 className="text-sm font-bold text-white/40 uppercase tracking-wider mb-3">
-                How to Play
-              </h3>
-              <ol className="space-y-2 text-sm text-white/60">
-                <li className="flex gap-2">
-                  <span className="text-yellow-400 font-bold">1.</span>
-                  Connect your Phantom wallet
-                </li>
-                <li className="flex gap-2">
-                  <span className="text-yellow-400 font-bold">2.</span>
-                  Choose a horse and bet amount
-                </li>
-                <li className="flex gap-2">
-                  <span className="text-yellow-400 font-bold">3.</span>
-                  Send SOL to the horse's wallet
-                </li>
-                <li className="flex gap-2">
-                  <span className="text-yellow-400 font-bold">4.</span>
-                  Watch the race & collect winnings!
-                </li>
-              </ol>
-            </div>
-
-            <div className="mt-6 p-4 rounded-xl bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/20">
-              <h3 className="text-sm font-bold text-purple-400 uppercase tracking-wider mb-2">
-                Payout Structure
-              </h3>
-              <p className="text-xs text-white/50 mb-2">
-                Winners split the losing pool proportionally based on bet size.
-              </p>
-              <div className="text-xs text-white/40">
-                <span className="text-purple-400">5%</span> house fee on winnings
-              </div>
-            </div>
+        {/* Timer & Stats Bar */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <CountdownTimer seconds={timeRemaining} totalPool={totalPool} />
+          
+          <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
+            <p className="text-xs text-gray-500 mb-1">Total Pool</p>
+            <p className="text-2xl font-bold text-gray-900">{totalPool.toFixed(3)} <span className="text-base font-normal text-gray-400">SOL</span></p>
           </div>
-
-          <div className="lg:col-span-3">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-black uppercase tracking-wider">
-                {isRacing ? '🏁 Race in Progress!' : 'Place Your Bets'}
-              </h2>
-              {!isRacing && (
-                <span className="text-sm text-white/40">
-                  Click a horse to bet
-                </span>
-              )}
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {horses.map((horse) => (
-                <HorseCard
-                  key={horse.id}
-                  horse={horse}
-                  onBet={handleBet}
-                  disabled={isRacing || timeRemaining === 0}
-                  isWinner={lastResult?.winningHorseId === horse.id}
-                />
-              ))}
-            </div>
+          
+          <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
+            <p className="text-xs text-gray-500 mb-1">Horses</p>
+            <p className="text-2xl font-bold text-gray-900">{horses.length} <span className="text-base font-normal text-gray-400">competing</span></p>
           </div>
         </div>
 
-        <footer className="text-center py-8 border-t border-white/10">
-          <p className="text-white/30 text-sm">
-            Powered by Solana • Wallets via{' '}
-            <a 
-              href="https://pumpportal.fun" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="text-purple-400 hover:text-purple-300 transition-colors"
-            >
-              PumpPortal
-            </a>
-          </p>
-          <p className="text-white/20 text-xs mt-2">
-            Please gamble responsibly. 18+ only.
+        {/* Race Track */}
+        <RaceTrack 
+          horses={horses} 
+          isRacing={isRacing}
+          winningHorseId={lastResult?.winningHorseId}
+          finalPositions={racePositions}
+        />
+
+        {/* Horses Grid */}
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">Place Your Bets</h2>
+            <p className="text-sm text-gray-500">
+              {isRacing ? 'Race in progress...' : 'Select a horse to bet'}
+            </p>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {horses.map((horse) => (
+              <HorseCard
+                key={horse.id}
+                horse={horse}
+                onBet={handleBet}
+                disabled={isRacing || timeRemaining === 0}
+                isWinner={lastResult?.winningHorseId === horse.id}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <footer className="text-center py-8 border-t border-gray-200">
+          <p className="text-sm text-gray-400">
+            Built on Solana • Races every 5 minutes
           </p>
         </footer>
       </main>

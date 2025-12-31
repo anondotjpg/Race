@@ -15,6 +15,18 @@ const RPC_ENDPOINT = process.env.NEXT_PUBLIC_SOLANA_RPC || 'https://api.mainnet-
 
 export const connection = new Connection(RPC_ENDPOINT, 'confirmed');
 
+// Create wallet locally using Solana web3.js
+export function createWallet(): {
+  publicKey: string;
+  privateKey: string;
+} {
+  const keypair = Keypair.generate();
+  return {
+    publicKey: keypair.publicKey.toBase58(),
+    privateKey: bs58.encode(keypair.secretKey),
+  };
+}
+
 // Create wallet using PumpPortal API
 export async function createPumpPortalWallet(): Promise<{
   publicKey: string;
@@ -27,18 +39,25 @@ export async function createPumpPortalWallet(): Promise<{
     });
     
     if (!response.ok) {
-      throw new Error('Failed to create wallet via PumpPortal');
+      throw new Error(`PumpPortal API error: ${response.status}`);
     }
     
     const data = await response.json();
-    return {
-      publicKey: data.publicKey || data.wallet,
-      privateKey: data.privateKey || data.secret,
-      apiKey: data.apiKey,
-    };
+    
+    // PumpPortal returns: walletPublicKey, privateKey, apiKey
+    const publicKey = data.walletPublicKey;
+    const privateKey = data.privateKey;
+    const apiKey = data.apiKey;
+    
+    if (!publicKey || !privateKey) {
+      throw new Error('Missing keys in PumpPortal response');
+    }
+    
+    console.log('PumpPortal wallet created:', publicKey);
+    
+    return { publicKey, privateKey, apiKey };
   } catch (error) {
-    console.error('PumpPortal wallet creation failed, using local generation:', error);
-    // Fallback to local wallet generation
+    console.error('PumpPortal failed, using local generation:', error);
     const keypair = Keypair.generate();
     return {
       publicKey: keypair.publicKey.toBase58(),
