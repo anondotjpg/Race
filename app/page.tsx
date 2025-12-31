@@ -191,7 +191,7 @@ export default function Home() {
         </div>
 
         <footer className="text-center py-6 border-t-4 border-[#555] text-[10px] text-[#7CFF7C]">
-          BUILT ON SOLANA • STAKES ARE FINAL
+          BUILT ON SOLANA • ON-CHAIN HORSE RACES
         </footer>
       </main>
 
