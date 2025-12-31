@@ -5,38 +5,72 @@ import { verifyTransaction } from '@/app/lib/solana';
 import { recordBet } from '@/app/lib/race-engine';
 
 export async function POST(request: NextRequest) {
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('🎲 [BET] New bet request');
+  
   const supabase = createServerSupabaseClient();
   
   try {
-    const { raceId, horseId, txSignature, bettorWallet } = await request.json();
+    const body = await request.json();
+    const { raceId, horseId, txSignature, bettorWallet } = body;
+    
+    console.log('[BET] Request body:', {
+      raceId: raceId || 'MISSING',
+      horseId: horseId || 'MISSING',
+      txSignature: txSignature ? txSignature.slice(0, 20) + '...' : 'MISSING',
+      bettorWallet: bettorWallet ? bettorWallet.slice(0, 10) + '...' : 'MISSING'
+    });
     
     if (!raceId || !horseId || !txSignature || !bettorWallet) {
+      console.log('[BET] ❌ Missing required fields');
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
     
     // Get the horse's wallet address
+    console.log('[BET] Looking up horse:', horseId);
     const { data: horse, error: horseError } = await supabase
       .from('horses')
-      .select('wallet_address')
+      .select('wallet_address, name')
       .eq('id', horseId)
       .single();
     
-    if (horseError || !horse) {
+    if (horseError) {
+      console.log('[BET] ❌ Horse query error:', horseError);
       return NextResponse.json({ error: 'Horse not found' }, { status: 404 });
     }
     
+    if (!horse) {
+      console.log('[BET] ❌ Horse not found');
+      return NextResponse.json({ error: 'Horse not found' }, { status: 404 });
+    }
+    
+    console.log('[BET] Horse found:', horse.name, '| Wallet:', horse.wallet_address?.slice(0, 10) + '...');
+    
     // Verify the transaction
+    console.log('[BET] Verifying transaction...');
     const verification = await verifyTransaction(txSignature, horse.wallet_address);
     
+    console.log('[BET] Verification result:', {
+      valid: verification.valid,
+      amount: verification.amount,
+      sender: verification.sender ? verification.sender.slice(0, 10) + '...' : 'NONE'
+    });
+    
     if (!verification.valid) {
+      console.log('[BET] ❌ Transaction verification failed');
       return NextResponse.json({ error: 'Transaction verification failed' }, { status: 400 });
     }
     
     if (verification.sender !== bettorWallet) {
+      console.log('[BET] ❌ Sender mismatch:', {
+        expected: bettorWallet.slice(0, 10) + '...',
+        got: verification.sender?.slice(0, 10) + '...'
+      });
       return NextResponse.json({ error: 'Sender wallet mismatch' }, { status: 400 });
     }
     
     // Record the bet
+    console.log('[BET] Recording bet...');
     const success = await recordBet(
       raceId,
       horseId,
@@ -46,8 +80,12 @@ export async function POST(request: NextRequest) {
     );
     
     if (!success) {
+      console.log('[BET] ❌ recordBet returned false (race ended or duplicate)');
       return NextResponse.json({ error: 'Failed to record bet - race may have ended' }, { status: 400 });
     }
+    
+    console.log('[BET] ✓ Bet recorded successfully!');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     
     return NextResponse.json({
       success: true,
@@ -56,7 +94,8 @@ export async function POST(request: NextRequest) {
       raceId
     });
   } catch (error) {
-    console.error('Bet API error:', error);
+    console.error('[BET] ❌ Exception:', error);
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
