@@ -1,8 +1,8 @@
 // app/api/cron/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase';
-import { executeRace, startNewRace } from '@/lib/race-engine';
-import { connection } from '@/lib/solana';
+import { createServerSupabaseClient } from '@/app/lib/supabase';
+import { executeRace, startNewRace } from '@/app/lib/race-engine';
+import { connection } from '@/app/lib/solana';
 import { PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
 
 export const runtime = 'nodejs';
