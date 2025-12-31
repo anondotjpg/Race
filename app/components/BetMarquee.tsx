@@ -165,6 +165,12 @@ export function BetMarquee({ bets, horses }: BetMarqueeProps) {
           {bets.map((bet, i) => (
             <BetCard key={`b-${bet.id}-${i}`} bet={bet} />
           ))}
+                    {bets.map((bet, i) => (
+            <BetCard key={`a-${bet.id}-${i}`} bet={bet} />
+          ))}
+          {bets.map((bet, i) => (
+            <BetCard key={`b-${bet.id}-${i}`} bet={bet} />
+          ))}
         </div>
       </div>
     </div>
