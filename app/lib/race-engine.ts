@@ -1,6 +1,7 @@
 // lib/race-engine.ts
 import { createServerSupabaseClient } from './supabase';
-import type { Bet, RaceResult } from '../types';
+import { sendPayout, aggregateFunds } from './solana';
+import type { Bet, RaceResult } from '@/types';
 
 const HOUSE_FEE_PERCENT = 5;
 const RACE_DURATION_MS = 5 * 60 * 1000; // 5 minutes betting
@@ -165,15 +166,65 @@ export async function executeRace(
       .eq('status', 'confirmed');
   }
 
-  // Record payouts
-  for (const p of payouts) {
-    await supabase.from('payouts').insert({
-      race_id: raceId,
-      bet_id: p.betId,
-      recipient_wallet: p.wallet,
-      amount: p.amount,
-      status: 'pending',
-    });
+  // Process actual payouts - aggregate funds to house wallet first
+  const houseWallet = process.env.HOUSE_WALLET_ADDRESS;
+  const housePrivateKey = process.env.HOUSE_WALLET_PRIVATE_KEY;
+  
+  if (houseWallet && housePrivateKey && payouts.length > 0) {
+    // Get horse private keys for aggregation
+    const { data: horsesWithKeys } = await supabase
+      .from('horses')
+      .select('wallet_private_key');
+    
+    if (horsesWithKeys) {
+      const privateKeys = horsesWithKeys
+        .map(h => h.wallet_private_key)
+        .filter(Boolean) as string[];
+      
+      // Aggregate all horse wallet funds to house wallet
+      await aggregateFunds(privateKeys, houseWallet);
+    }
+    
+    // Send payouts from house wallet
+    for (const p of payouts) {
+      try {
+        const txSignature = await sendPayout(housePrivateKey, p.wallet, p.amount);
+        
+        await supabase.from('payouts').insert({
+          race_id: raceId,
+          bet_id: p.betId,
+          recipient_wallet: p.wallet,
+          amount: p.amount,
+          tx_signature: txSignature,
+          status: txSignature ? 'sent' : 'failed',
+        });
+        
+        if (txSignature) {
+          console.log(`Payout sent: ${p.amount} SOL to ${p.wallet} - ${txSignature}`);
+        }
+      } catch (err) {
+        console.error(`Payout failed for ${p.wallet}:`, err);
+        
+        await supabase.from('payouts').insert({
+          race_id: raceId,
+          bet_id: p.betId,
+          recipient_wallet: p.wallet,
+          amount: p.amount,
+          status: 'failed',
+        });
+      }
+    }
+  } else {
+    // No house wallet configured - just record pending payouts
+    for (const p of payouts) {
+      await supabase.from('payouts').insert({
+        race_id: raceId,
+        bet_id: p.betId,
+        recipient_wallet: p.wallet,
+        amount: p.amount,
+        status: 'pending',
+      });
+    }
   }
 
   return {
