@@ -96,19 +96,10 @@ export async function executeRace(
     };
   }
 
-  // Lock race to 'racing' status
-  const { data: locked } = await supabase
-    .from('races')
-    .update({
-      status: 'racing',
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', raceId)
-    .in('status', ['betting', 'racing'])
-    .select('status')
-    .maybeSingle();
-
-  if (!locked) return null;
+  // Only execute if still in betting status
+  if (race.status !== 'betting') {
+    return null;
+  }
 
   const { data: horses } = await supabase.from('horses').select('*');
   const { data: bets } = await supabase
@@ -136,8 +127,8 @@ export async function executeRace(
 
   const payouts = calculatePayouts(winnerId, bets ?? []);
 
-  // Update race as finished
-  await supabase
+  // Update race DIRECTLY to finished (skip 'racing' status)
+  const { error: updateError } = await supabase
     .from('races')
     .update({
       status: 'finished',
@@ -148,7 +139,12 @@ export async function executeRace(
       updated_at: new Date().toISOString(),
     })
     .eq('id', raceId)
-    .eq('status', 'racing');
+    .eq('status', 'betting');  // Only update if still betting
+
+  if (updateError) {
+    console.error('Failed to update race:', updateError);
+    return null;
+  }
 
   // Update bet statuses
   for (const bet of bets ?? []) {
@@ -164,56 +160,65 @@ export async function executeRace(
       .eq('status', 'confirmed');
   }
 
-  // Process actual payouts - aggregate funds to house wallet first
+  // House Wallet Payouts
+  // 1. Aggregate all horse wallets → House
+  // 2. House keeps 5% fee
+  // 3. House sends payouts to winners
   const houseWallet = process.env.HOUSE_WALLET_ADDRESS;
   const housePrivateKey = process.env.HOUSE_WALLET_PRIVATE_KEY;
-  
+
   if (houseWallet && housePrivateKey && payouts.length > 0) {
-    // Get horse private keys for aggregation
-    const { data: horsesWithKeys } = await supabase
-      .from('horses')
-      .select('wallet_private_key');
-    
-    if (horsesWithKeys) {
-      const privateKeys = horsesWithKeys
-        .map(h => h.wallet_private_key)
-        .filter(Boolean) as string[];
-      
-      // Aggregate all horse wallet funds to house wallet
-      await aggregateFunds(privateKeys, houseWallet);
-    }
-    
-    // Send payouts from house wallet
-    for (const p of payouts) {
-      try {
-        const txSignature = await sendPayout(housePrivateKey, p.wallet, p.amount);
-        
-        await supabase.from('payouts').insert({
-          race_id: raceId,
-          bet_id: p.betId,
-          recipient_wallet: p.wallet,
-          amount: p.amount,
-          tx_signature: txSignature,
-          status: txSignature ? 'sent' : 'failed',
-        });
-        
-        if (txSignature) {
-          console.log(`Payout sent: ${p.amount} SOL to ${p.wallet} - ${txSignature}`);
-        }
-      } catch (err) {
-        console.error(`Payout failed for ${p.wallet}:`, err);
-        
-        await supabase.from('payouts').insert({
-          race_id: raceId,
-          bet_id: p.betId,
-          recipient_wallet: p.wallet,
-          amount: p.amount,
-          status: 'failed',
-        });
+    try {
+      // Get all horse private keys
+      const { data: horsesWithKeys } = await supabase
+        .from('horses')
+        .select('wallet_private_key');
+
+      if (horsesWithKeys) {
+        const privateKeys = horsesWithKeys
+          .map(h => h.wallet_private_key)
+          .filter(Boolean) as string[];
+
+        // Aggregate: Horse Wallets → House Wallet
+        const aggregated = await aggregateFunds(privateKeys, houseWallet);
+        console.log(`Aggregated ${aggregated} SOL to house wallet`);
       }
+
+      // Send payouts from House Wallet → Winners
+      for (const p of payouts) {
+        try {
+          const txSignature = await sendPayout(housePrivateKey, p.wallet, p.amount);
+
+          await supabase.from('payouts').insert({
+            race_id: raceId,
+            bet_id: p.betId,
+            recipient_wallet: p.wallet,
+            amount: p.amount,
+            tx_signature: txSignature,
+            status: txSignature ? 'sent' : 'failed',
+          });
+
+          if (txSignature) {
+            console.log(`Payout sent: ${p.amount} SOL to ${p.wallet}`);
+          }
+        } catch (err) {
+          console.error(`Payout failed for ${p.wallet}:`, err);
+
+          await supabase.from('payouts').insert({
+            race_id: raceId,
+            bet_id: p.betId,
+            recipient_wallet: p.wallet,
+            amount: p.amount,
+            status: 'failed',
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Payout process failed:', err);
     }
-  } else {
-    // No house wallet configured - just record pending payouts
+  } else if (payouts.length > 0) {
+    // No house wallet configured - record as pending
+    console.log('No house wallet configured, recording payouts as pending');
     for (const p of payouts) {
       await supabase.from('payouts').insert({
         race_id: raceId,
@@ -245,17 +250,29 @@ export async function startNewRace(): Promise<string | null> {
   const supabase = createServerSupabaseClient();
   const now = Date.now();
 
+  console.log('[startNewRace] Checking for active races...');
+
   // Check no active race
-  const { data: active } = await supabase
+  const { data: active, error: activeError } = await supabase
     .from('races')
-    .select('id')
+    .select('id, status')
     .in('status', ['betting', 'racing'])
     .limit(1)
     .maybeSingle();
 
-  if (active) return null;
+  if (activeError) {
+    console.error('[startNewRace] Query error:', activeError);
+    return null;
+  }
 
-  const { data } = await supabase
+  if (active) {
+    console.log('[startNewRace] Active race exists:', active.id, 'status:', active.status);
+    return null;
+  }
+
+  console.log('[startNewRace] No active race, creating new one...');
+
+  const { data, error: insertError } = await supabase
     .from('races')
     .insert({
       status: 'betting',
@@ -267,6 +284,12 @@ export async function startNewRace(): Promise<string | null> {
     .select('id')
     .single();
 
+  if (insertError) {
+    console.error('[startNewRace] Insert error:', insertError);
+    return null;
+  }
+
+  console.log('[startNewRace] Created race:', data?.id);
   return data?.id ?? null;
 }
 
