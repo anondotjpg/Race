@@ -27,6 +27,9 @@ export default function Home() {
   const { wallet } = useWallet();
   const [showResults, setShowResults] = useState(false);
   const [lastShownResultId, setLastShownResultId] = useState<string | null>(null);
+  
+  // New state to keep the UI in "Race Mode" regardless of backend timer
+  const [isVisualizing, setIsVisualizing] = useState(false);
 
   // --- Retro UI Toast Styles ---
   const toastStyle = {
@@ -48,15 +51,26 @@ export default function Home() {
   };
 
   /**
-   * TRIGGER RESULTS MODAL
-   * Set to 8500ms to match the 8-second RaceTrack animation duration
-   * plus a 500ms "Photo Finish" pause.
+   * MANAGE VISUALIZATION STATE
+   * When isRacing flips to true, we lock the UI.
+   * We only unlock it 8.5 seconds later.
+   */
+  useEffect(() => {
+    if (isRacing) {
+      setIsVisualizing(true);
+    }
+  }, [isRacing]);
+
+  /**
+   * TRIGGER RESULTS MODAL & UNLOCK UI
+   * After 8.5s (8s race + 0.5s pause), show results and allow betting/timer to reappear.
    */
   useEffect(() => {
     if (lastResult && !isRacing && lastResult.raceId !== lastShownResultId) {
       const t = setTimeout(() => {
         setShowResults(true);
         setLastShownResultId(lastResult.raceId);
+        setIsVisualizing(false); // Unlock the UI (Timer and Bets)
       }, 8500); 
       return () => clearTimeout(t);
     }
@@ -64,9 +78,6 @@ export default function Home() {
 
   /**
    * CLEANUP
-   * We only force-close the results modal if a BRAND NEW race starts.
-   * This allows the user to look at the winner as long as they want 
-   * during the next betting phase.
    */
   useEffect(() => {
     if (isRacing && showResults) {
@@ -143,7 +154,6 @@ export default function Home() {
     <div className="min-h-screen bg-black font-mono uppercase tracking-tight text-[#1aff00]">
       <Toaster position="top-right" reverseOrder={false} />
 
-      {/* CRT Scanline Overlay */}
       <div className="fixed inset-0 pointer-events-none opacity-10 z-[5] bg-[linear-gradient(rgba(0,0,0,0)_50%,rgba(0,0,0,0.35)_50%)] bg-[length:100%_4px]" />
 
       <header className="sticky top-0 z-40 bg-black border-b-4 border-[#555]">
@@ -175,16 +185,15 @@ export default function Home() {
 
       <main className="max-w-7xl mx-auto px-4 py-6 space-y-6 relative z-10">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <CountdownTimer seconds={timeRemaining} totalPool={totalPool} />
+          {/* Timer is blurred/hidden during visualization to prevent confusion */}
+          <div className={isVisualizing ? "opacity-20 grayscale pointer-events-none transition-all" : "transition-all"}>
+            <CountdownTimer seconds={timeRemaining} totalPool={totalPool} />
+          </div>
           <div className="lg:col-span-2">
             <BetMarquee bets={recentBets} horses={horses} />
           </div>
         </div>
 
-        {/* RACE TRACK 
-            Note: finalPositions is passed here to ensure visual order 
-            matches the server result.
-        */}
         <RaceTrack
           horses={horses}
           isRacing={isRacing}
@@ -196,18 +205,19 @@ export default function Home() {
         <div>
           <div className="flex justify-between items-center mb-4">
             <div className="text-lg text-[#1aff00] drop-shadow-[0_0_8px_rgba(26,255,0,0.4)]">
-              {isRacing ? "RACE IN PROGRESS" : "PLACE YOUR BETS"}
+              {isVisualizing ? "RACE IN PROGRESS" : "PLACE YOUR BETS"}
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          {/* Horse Cards are disabled and faded during visualization */}
+          <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 transition-all ${isVisualizing ? "opacity-40 grayscale pointer-events-none" : ""}`}>
             {horses.map(horse => (
               <HorseCard
                 key={horse.id}
                 horse={horse}
                 onBet={handleBet}
-                disabled={isRacing || timeRemaining === 0}
-                isWinner={lastResult?.winningHorseId === horse.id && !isRacing}
+                disabled={isVisualizing || isRacing || timeRemaining === 0}
+                isWinner={lastResult?.winningHorseId === horse.id && !isVisualizing}
               />
             ))}
           </div>
@@ -218,7 +228,6 @@ export default function Home() {
         </footer>
       </main>
 
-      {/* RESULTS MODAL */}
       {showResults && lastResult && (
         <ResultsModal
           result={lastResult}
