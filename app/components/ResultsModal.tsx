@@ -16,117 +16,92 @@ export function ResultsModal({ result, horses, userWallet, onClose }: ResultsMod
     ? result.payouts.find(p => p.wallet === userWallet)
     : null;
 
-  // Generate positions if not provided
   const positions = result.positions?.length > 0 
     ? result.positions 
     : [result.winningHorseId, ...horses.filter(h => h.id !== result.winningHorseId).map(h => h.id)];
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-      {/* Backdrop - click to close */}
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 font-mono uppercase">
+      {/* Backdrop with scanline effect */}
       <div 
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm" 
+        className="absolute inset-0 bg-black/80 backdrop-blur-sm" 
         onClick={onClose} 
       />
       
-      {/* Modal */}
-      <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden animate-modalIn">
-        {/* Close button */}
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 z-10 w-8 h-8 flex items-center justify-center rounded-full bg-black/10 hover:bg-black/20 transition-colors"
-        >
-          <span className="text-gray-600 text-lg">×</span>
-        </button>
-
-        {/* Confetti for winners */}
-        {userPayout && (
-          <div className="absolute inset-0 overflow-hidden pointer-events-none">
-            {[...Array(30)].map((_, i) => (
-              <div
-                key={i}
-                className="absolute w-2 h-2 rounded-full animate-confetti"
-                style={{
-                  left: `${Math.random() * 100}%`,
-                  backgroundColor: ['#fbbf24', '#f87171', '#34d399', '#60a5fa', '#a78bfa'][i % 5],
-                  animationDelay: `${Math.random() * 1}s`,
-                }}
-              />
-            ))}
-          </div>
-        )}
+      {/* Modal - Retro Styled */}
+      <div className="relative w-full max-w-md bg-black border-4 border-[#1aff00] shadow-[0_0_20px_rgba(26,255,0,0.3)] overflow-hidden animate-modalIn">
         
+        {/* Header bar */}
+        <div className="bg-[#1aff00] px-4 py-1 flex justify-between items-center">
+          <span className="text-black font-bold text-sm">RACE_RESULTS.EXE</span>
+          <button
+            onClick={onClose}
+            className="text-black font-bold hover:bg-black hover:text-[#1aff00] px-2 transition-colors"
+          >
+            [X]
+          </button>
+        </div>
+
         {/* Winner section */}
-        <div className="relative bg-gradient-to-b from-amber-50 to-white px-6 pt-8 pb-6 text-center">
-          <div className="w-20 h-20 mx-auto mb-4 bg-gradient-to-br from-amber-400 to-yellow-500 rounded-2xl flex items-center justify-center shadow-lg shadow-amber-500/30 rotate-3">
-            <span className="text-4xl">🏆</span>
+        <div className="relative p-6 text-center border-b-4 border-[#555]">
+          <div className="mb-4 inline-block animate-pulse">
+            <span className="text-6xl filter drop-shadow-[0_0_10px_rgba(26,255,0,0.8)]">
+              {winningHorse?.emoji || '🐴'}
+            </span>
           </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-1">Race Complete!</h2>
-          <p className="text-gray-500">And the winner is...</p>
+          <h2 className="text-2xl font-bold text-[#1aff00] mb-1 tracking-tighter">WINNER DECLARED</h2>
           
-          <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-amber-100 rounded-full">
-            <span className="text-2xl">{winningHorse?.emoji || '🐴'}</span>
-            <span className="font-bold text-amber-900">{winningHorse?.name || result.winningHorseName}</span>
+          <div className="mt-4 p-3 border-2 border-dashed border-[#1aff00] inline-block">
+            <span className="text-xl font-bold text-[#1aff00]">
+              {winningHorse?.name || result.winningHorseName}
+            </span>
           </div>
         </div>
         
-        {/* Results */}
-        <div className="px-6 py-4 border-t border-gray-100">
-          <p className="text-xs text-gray-500 uppercase tracking-wider mb-3">Final Standings</p>
-          <div className="space-y-2">
+        {/* Results List */}
+        <div className="px-6 py-4 bg-[#0a0a0a]">
+          <p className="text-xs text-[#7CFF7C] mb-3 opacity-70 italic underline">Final Standings</p>
+          <div className="space-y-1">
             {positions.slice(0, 5).map((horseId, index) => {
               const horse = horses.find(h => h.id === horseId);
               if (!horse) return null;
               
-              const medals = ['🥇', '🥈', '🥉'];
-              
               return (
                 <div 
                   key={horseId}
-                  className={`
-                    flex items-center gap-3 p-2 rounded-xl transition-colors
-                    ${index === 0 ? 'bg-amber-50' : ''}
-                  `}
+                  className={`flex items-center gap-4 p-1 ${index === 0 ? 'text-[#1aff00] bg-[#1aff00]/10' : 'text-[#7CFF7C]'}`}
                 >
-                  <span className="w-8 text-center">
-                    {index < 3 ? (
-                      <span className="text-lg">{medals[index]}</span>
-                    ) : (
-                      <span className="text-sm text-gray-400 font-medium">{index + 1}</span>
-                    )}
+                  <span className="w-10 font-bold">
+                    {index === 0 ? 'WIN' : `${index + 1}ST`}
                   </span>
-                  <span className="text-xl">{horse.emoji}</span>
-                  <span className={`font-medium ${index === 0 ? 'text-amber-900' : 'text-gray-700'}`}>
-                    {horse.name}
-                  </span>
+                  <span className="text-lg">{horse.emoji}</span>
+                  <span className="flex-1 truncate">{horse.name}</span>
                 </div>
               );
             })}
           </div>
         </div>
         
-        {/* User payout */}
+        {/* User payout - Neon Alert style */}
         {userPayout && (
-          <div className="px-6 py-4 bg-gradient-to-r from-green-50 to-emerald-50 border-t border-green-100">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-green-600 font-medium">🎉 You won!</p>
-                <p className="text-xs text-green-500/70">Payout sent to your wallet</p>
-              </div>
-              <p className="text-2xl font-bold text-green-600">
-                +{userPayout.amount.toFixed(4)} <span className="text-base font-normal">SOL</span>
+          <div className="mx-4 mb-4 p-4 bg-[#1aff00] text-black border-2 border-white animate-bounce-short">
+            <div className="flex flex-col items-center justify-center text-center">
+              <p className="font-black text-lg leading-none">!!! YOU WON !!!</p>
+              <p className="text-2xl font-black mt-2">
+                +{userPayout.amount.toFixed(4)} SOL
               </p>
+              <p className="text-[10px] font-bold opacity-80 mt-1">TRANSACTION BROADCASTED</p>
             </div>
           </div>
         )}
         
-        {/* Action */}
-        <div className="p-4 bg-gray-50">
+        {/* Action Button */}
+        <div className="p-4 border-t-4 border-[#555]">
           <button
             onClick={onClose}
-            className="w-full py-3 bg-gray-900 hover:bg-gray-800 text-white font-medium rounded-xl transition-colors"
+            className="w-full py-3 bg-[#1aff00] text-black font-black hover:bg-white transition-colors active:translate-y-1"
           >
-            Continue to Next Race
+            RETURN TO TRACK
           </button>
         </div>
       </div>
@@ -135,28 +110,22 @@ export function ResultsModal({ result, horses, userWallet, onClose }: ResultsMod
         @keyframes modalIn {
           from {
             opacity: 0;
-            transform: scale(0.95) translateY(10px);
+            transform: scale(0.8) rotate(-2deg);
           }
           to {
             opacity: 1;
-            transform: scale(1) translateY(0);
+            transform: scale(1) rotate(0deg);
           }
+        }
+        @keyframes bounce-short {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-5px); }
         }
         .animate-modalIn {
-          animation: modalIn 0.3s ease-out;
+          animation: modalIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
         }
-        @keyframes confetti {
-          0% {
-            transform: translateY(-10px) rotate(0deg);
-            opacity: 1;
-          }
-          100% {
-            transform: translateY(400px) rotate(720deg);
-            opacity: 0;
-          }
-        }
-        .animate-confetti {
-          animation: confetti 2s ease-out forwards;
+        .animate-bounce-short {
+          animation: bounce-short 0.5s ease-in-out infinite;
         }
       `}</style>
     </div>

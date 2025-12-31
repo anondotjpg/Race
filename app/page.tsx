@@ -28,6 +28,7 @@ export default function Home() {
   const [showResults, setShowResults] = useState(false);
   const [lastShownResultId, setLastShownResultId] = useState<string | null>(null);
 
+  // Retro UI Toast Styles
   const toastStyle = {
     borderRadius: '0px',
     background: '#000',
@@ -46,21 +47,25 @@ export default function Home() {
     boxShadow: '0 0 15px rgba(239,68,68,0.2)',
   };
 
+  /**
+   * TRIGGER RESULTS MODAL
+   * Increased delay to 2.5s ensures the RaceTrack animation 
+   * completes and the "Photo Finish" is visible before the modal pops up.
+   */
   useEffect(() => {
     if (lastResult && !isRacing && lastResult.raceId !== lastShownResultId) {
       const t = setTimeout(() => {
         setShowResults(true);
         setLastShownResultId(lastResult.raceId);
-      }, 500);
+      }, 2500); 
       return () => clearTimeout(t);
     }
   }, [lastResult, isRacing, lastShownResultId]);
 
-  useEffect(() => {
-    if (currentRace?.status === 'betting' && showResults) {
-      setShowResults(false);
-    }
-  }, [currentRace?.status, showResults]);
+  /** * NOTE: We removed the auto-close effect that monitored currentRace.status.
+   * This ensures the modal stays open even if the next betting round starts 
+   * in the background, until the user clicks "Return to Track".
+   */
 
   if (loading) {
     return (
@@ -145,6 +150,7 @@ export default function Home() {
     <div className="min-h-screen bg-black font-mono uppercase tracking-tight text-[#1aff00]">
       <Toaster position="top-right" reverseOrder={false} />
 
+      {/* CRT Scanline Overlay */}
       <div className="fixed inset-0 pointer-events-none opacity-10 z-[5] bg-[linear-gradient(rgba(0,0,0,0)_50%,rgba(0,0,0,0.35)_50%)] bg-[length:100%_4px]" />
 
       <header className="sticky top-0 z-40 bg-black border-b-4 border-[#555]">
@@ -152,20 +158,22 @@ export default function Home() {
           <div className="flex items-center">
             <img src="/load.gif" alt="Logo" className="h-10 w-auto pixelated" style={{ filter: `drop-shadow(0 0 2px rgba(26, 255, 0, 0.6))` }} />
           </div>
-          <div className="text-center text-sm drop-shadow-[0_0_5px_rgba(26,255,0,0.5)]">
+          
+          <div className="text-center text-sm drop-shadow-[0_0_5px_rgba(26,255,0,0.2)] font-semibold">
             {currentRace ? `RACE #${currentRace.race_number}` : 'NO ACTIVE RACE'}
           </div>
-          <div className="flex justify-end items-center gap-4">
+
+          <div className="flex justify-end items-center gap-6">
             {/* TWITTER / X LINK */}
             <a 
               href="https://twitter.com" 
               target="_blank" 
               rel="noopener noreferrer"
-              className="hover:drop-shadow-[0_0_8px_rgba(26,255,0,0.2)] transition-all duration-200"
+              className="hover:drop-shadow-[0_0_8px_rgba(26,255,0,0.8)] transition-all duration-200 hover:scale-110"
+              aria-label="Follow on X"
             >
               <svg 
                 viewBox="0 0 24 24" 
-                aria-hidden="true" 
                 className="h-5 w-5 fill-[#1aff00]"
               >
                 <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"></path>
@@ -194,7 +202,6 @@ export default function Home() {
         <div>
           <div className="flex justify-between items-center mb-4">
             <div className="text-lg text-[#1aff00] drop-shadow-[0_0_8px_rgba(26,255,0,0.4)]">PLACE YOUR BETS</div>
-            <div className="text-[10px] text-[#7CFF7C]">{isRacing ? 'RACE IN PROGRESS' : 'BETTING OPEN'}</div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -211,10 +218,11 @@ export default function Home() {
         </div>
 
         <footer className="text-center py-6 border-t-4 border-[#555] text-[10px] text-[#7CFF7C]">
-          BUILT ON SOLANA • RACES EVERY 1 MINUTE(S)
+          BUILT ON SOLANA • RACES EVERY 1 MINUTE(S) • V.1.0.4-BETA
         </footer>
       </main>
 
+      {/* WINNER MODAL */}
       {showResults && lastResult && (
         <ResultsModal
           result={lastResult}

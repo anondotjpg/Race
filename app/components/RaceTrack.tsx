@@ -17,26 +17,20 @@ export function RaceTrack({
   finalPositions,
 }: RaceTrackProps) {
   const [positions, setPositions] = useState<Record<number, number>>({});
-  const [showWinner, setShowWinner] = useState(false);
-
+  
   const requestRef = useRef<number | null>(null);
   const startTimeRef = useRef<number | null>(null);
   const raceTokenRef = useRef(0);
-
-  const horseStatsRef = useRef<
-    Record<number, { base: number; kick: number; freq: number }>
-  >({});
+  const horseStatsRef = useRef<Record<number, { base: number; kick: number; freq: number }>>({});
 
   const RACE_DURATION = 8000;
 
   const startRace = () => {
     raceTokenRef.current += 1;
     const token = raceTokenRef.current;
-
     startTimeRef.current = null;
-    setShowWinner(false);
 
-    // Generate per-race stats (locked)
+    // Generate per-race stats
     horseStatsRef.current = Object.fromEntries(
       horses.map((h, i) => {
         const rank = finalPositions?.indexOf(h.id) ?? i;
@@ -50,8 +44,6 @@ export function RaceTrack({
         ];
       })
     );
-
-    setPositions(Object.fromEntries(horses.map(h => [h.id, 0])));
 
     const animate = (time: number) => {
       if (token !== raceTokenRef.current) return;
@@ -69,35 +61,22 @@ export function RaceTrack({
 
       setPositions(() => {
         const next: Record<number, number> = {};
-
         horses.forEach(h => {
           const s = horseStatsRef.current[h.id];
           const rank = finalPositions?.indexOf(h.id) ?? 5;
           const finish = (5 - rank) * 2.5;
+          const jitter = Math.sin(time / s.freq + h.id) * (t > 0.85 ? 0.3 : 0.8);
 
-          const jitter =
-            Math.sin(time / s.freq + h.id) * (t > 0.85 ? 0.3 : 0.8);
-
-          let pos =
-            phase * (82 + finish + s.kick * Math.max(0, t - 0.6)) * s.base +
-            jitter;
-
-          if (t >= 1) pos = 85 + finish;
+          let pos = phase * (82 + finish + s.kick * Math.max(0, t - 0.6)) * s.base + jitter;
+          if (t >= 1) pos = 85 + finish; // Lock at finish line
 
           next[h.id] = Math.max(0, pos);
         });
-
         return next;
       });
 
       if (t < 1) {
         requestRef.current = requestAnimationFrame(animate);
-      } else {
-        setTimeout(() => {
-          if (token === raceTokenRef.current) {
-            setShowWinner(true);
-          }
-        }, 600);
       }
     };
 
@@ -109,33 +88,30 @@ export function RaceTrack({
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
       startRace();
     } else {
-      if (requestRef.current) cancelAnimationFrame(requestRef.current);
-
+      // If a race just ended (we have a winningHorseId), DO NOT reset positions.
+      // This allows horses to stay at the finish line while the ResultsModal is up.
       if (!winningHorseId) {
+        if (requestRef.current) cancelAnimationFrame(requestRef.current);
         setPositions(Object.fromEntries(horses.map(h => [h.id, 0])));
-        setShowWinner(false);
       }
     }
 
     return () => {
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
     };
-  }, [isRacing]);
+  }, [isRacing, winningHorseId]);
 
   return (
-    <div className="relative bg-black p-2 border-4 border-[#555] font-mono uppercase tracking-tighter">
-      {/* CRT scanlines */}
-      <div className="absolute inset-0 pointer-events-none z-50 opacity-10 bg-[linear-gradient(rgba(0,0,0,0)_50%,rgba(0,0,0,0.35)_50%)] bg-[length:100%_4px]" />
-
-      {/* Track */}
+    <div className="relative bg-black p-2 border-4 border-[#555] font-mono uppercase tracking-tighter shadow-[0_0_20px_rgba(0,0,0,0.5)]">
+      {/* Track Background */}
       <div className="bg-[#222] p-1 border-2 border-[#444]">
-        <div className="relative bg-emerald-800 border-y-2 border-emerald-600">
+        <div className="relative bg-emerald-900 border-y-2 border-emerald-700 overflow-hidden">
+          
           {/* Finish line */}
           <div
             className="absolute right-12 inset-y-0 w-4 z-10"
             style={{
-              backgroundImage:
-                'repeating-conic-gradient(#000 0 25%, #fff 0 50%)',
+              backgroundImage: 'repeating-conic-gradient(#000 0 25%, #fff 0 50%)',
               backgroundSize: '8px 8px',
             }}
           />
@@ -143,26 +119,31 @@ export function RaceTrack({
           {horses.map((horse, index) => (
             <div
               key={horse.id}
-              className="relative h-15 border-b border-emerald-700/50 flex items-center"
+              className="relative h-14 border-b border-emerald-800/50 flex items-center"
             >
-              <div className="w-4 bg-black/40 text-[10px] text-yellow-500 flex items-center justify-center border-r border-emerald-600">
+              {/* Lane Number */}
+              <div className="w-6 bg-black/60 text-[10px] text-[#1aff00] flex items-center justify-center border-r border-emerald-700 h-full z-20">
                 {index + 1}
               </div>
 
+              {/* Lane */}
               <div className="flex-1 relative h-full">
                 <div
-                  className="absolute top-1/2"
+                  className="absolute top-1/2 transition-transform duration-100 ease-linear"
                   style={{
                     left: `${positions[horse.id] ?? 0}%`,
                     transform: 'translateY(-50%)',
                   }}
                 >
                   <div className="flex flex-col items-center">
-                    <span className="text-2xl animate-[gallop_0.5s_linear_infinite]">
+                    <span 
+                      className={`text-3xl ${isRacing ? 'animate-gallop' : ''}`}
+                      style={{ filter: `drop-shadow(0 0 5px rgba(0,0,0,0.5))` }}
+                    >
                       🏇
                     </span>
-                    <div className="bg-black/80 px-1 text-[8px] text-white border border-white/20">
-                      {horse.name.substring(0, 16)}
+                    <div className="bg-black text-[9px] text-[#1aff00] border border-[#1aff00]/30 px-1 whitespace-nowrap mt-[-4px]">
+                      {horse.name}
                     </div>
                   </div>
                 </div>
@@ -172,32 +153,14 @@ export function RaceTrack({
         </div>
       </div>
 
-      {/* Winner overlay */}
-      {showWinner && winningHorseId && (
-        <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/80">
-          <div className="border-4 border-double border-yellow-500 bg-blue-900 p-6 text-center">
-            <h2 className="text-yellow-400 text-2xl font-black italic animate-bounce">
-              WINNER!
-            </h2>
-            <div className="text-white text-xl mt-2">
-              {horses.find(h => h.id === winningHorseId)?.name}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Gallop animation */}
       <style jsx>{`
         @keyframes gallop {
-          0% {
-            transform: translateY(0);
-          }
-          50% {
-            transform: translateY(-2px);
-          }
-          100% {
-            transform: translateY(0);
-          }
+          0%, 100% { transform: translateY(0) rotate(0deg); }
+          25% { transform: translateY(-3px) rotate(-2deg); }
+          75% { transform: translateY(-1px) rotate(2deg); }
+        }
+        .animate-gallop {
+          animation: gallop 0.4s linear infinite;
         }
       `}</style>
     </div>
