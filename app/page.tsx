@@ -13,15 +13,8 @@ import toast, { Toaster } from 'react-hot-toast';
 
 export default function Home() {
   const { 
-    currentRace, 
-    horses, 
-    timeRemaining, 
-    isRacing, 
-    lastResult, 
-    totalPool,
-    racePositions,
-    recentBets,
-    loading 
+    currentRace, horses, timeRemaining, isRacing, 
+    lastResult, totalPool, racePositions, recentBets, loading 
   } = useGameState();
   
   const { wallet } = useWallet();
@@ -49,49 +42,32 @@ export default function Home() {
 
   /**
    * TRIGGER RESULTS MODAL
-   * Increased delay to 2.5s ensures the RaceTrack animation 
-   * completes and the "Photo Finish" is visible before the modal pops up.
+   * Waits 8.5 seconds (Animation = 8s + 0.5s pause).
+   * This ensures horses cross the finish line before the modal pops up.
    */
   useEffect(() => {
     if (lastResult && !isRacing && lastResult.raceId !== lastShownResultId) {
       const t = setTimeout(() => {
         setShowResults(true);
         setLastShownResultId(lastResult.raceId);
-      }, 2500); 
+      }, 8500); 
       return () => clearTimeout(t);
     }
   }, [lastResult, isRacing, lastShownResultId]);
 
-  /** * NOTE: We removed the auto-close effect that monitored currentRace.status.
-   * This ensures the modal stays open even if the next betting round starts 
-   * in the background, until the user clicks "Return to Track".
+  /**
+   * AUTO-HIDE MODAL & CLEANUP
+   * Closes the results window when the next betting round officially starts.
    */
+  useEffect(() => {
+    if (timeRemaining > 0 && showResults) {
+      setShowResults(false);
+    }
+  }, [timeRemaining, showResults]);
 
-  if (loading) {
-    return (
-      <div className="fixed inset-0 z-[100] bg-black flex items-center justify-center overflow-hidden">
-        <style>{`
-          @keyframes flash-expand {
-            0% { transform: scale(0.1); opacity: 0; filter: brightness(2); }
-            10% { transform: scale(1); opacity: 1; filter: brightness(1); }
-            80% { transform: scale(1.1); opacity: 1; filter: brightness(1.2); }
-            100% { transform: scale(20); opacity: 0; filter: brightness(5) blur(10px); }
-          }
-          .flash-container {
-            position: relative;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            animation: flash-expand 2.2s cubic-bezier(0.16, 1, 0.3, 1) infinite;
-          }
-        `}</style>
-        <div className="flash-container">
-          <img src="/load.gif" alt="Loading" className="w-[30vmin] h-[30vmin] pixelated" style={{ filter: `drop-shadow(0 0 10px rgba(26, 255, 0, 0.9)) drop-shadow(0 0 30px rgba(26, 255, 0, 0.5))` }} />
-        </div>
-      </div>
-    );
-  }
-
+  /**
+   * TRANSACTION HANDLER
+   */
   const handleBet = async (horseId: number, amount: number) => {
     const win = window as any;
     const phantom = win.phantom?.solana || win.solana;
@@ -144,43 +120,36 @@ export default function Home() {
       const msg = error?.message?.includes('User rejected') ? 'Cancelled' : 'Bet Failed';
       toast.error(msg, { style: errorStyle });
     }
-  };  
+  };
+
+  if (loading) {
+    return (
+      <div className="fixed inset-0 z-[100] bg-black flex items-center justify-center">
+        <img src="/load.gif" alt="Loading" className="w-[20vmin] pixelated" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-black font-mono uppercase tracking-tight text-[#1aff00]">
       <Toaster position="top-right" reverseOrder={false} />
 
-      {/* CRT Scanline Overlay */}
+      {/* CRT Scanline Effect */}
       <div className="fixed inset-0 pointer-events-none opacity-10 z-[5] bg-[linear-gradient(rgba(0,0,0,0)_50%,rgba(0,0,0,0.35)_50%)] bg-[length:100%_4px]" />
 
-      <header className="sticky top-0 z-40 bg-black border-b-4 border-[#555]">
-        <div className="max-w-7xl mx-auto px-4 py-3 grid grid-cols-3 items-center">
-          <div className="flex items-center">
-            <img src="/load.gif" alt="Logo" className="h-10 w-auto pixelated" style={{ filter: `drop-shadow(0 0 2px rgba(26, 255, 0, 0.6))` }} />
+      <header className="sticky top-0 z-40 bg-black border-b-4 border-[#555] px-4 py-3 flex justify-between items-center">
+        <div className="flex items-center gap-4">
+          <img src="/load.gif" alt="Logo" className="h-8 pixelated" />
+          <div className="text-xs sm:text-sm font-bold">
+            {currentRace ? `RACE #${currentRace.race_number}` : 'INITIALIZING...'}
           </div>
-          
-          <div className="text-center text-sm drop-shadow-[0_0_5px_rgba(26,255,0,0.2)] font-semibold">
-            {currentRace ? `RACE #${currentRace.race_number}` : 'NO ACTIVE RACE'}
-          </div>
-
-          <div className="flex justify-end items-center gap-6">
-            {/* TWITTER / X LINK */}
-            <a 
-              href="https://twitter.com" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="hover:drop-shadow-[0_0_8px_rgba(26,255,0,0.8)] transition-all duration-200 hover:scale-110"
-              aria-label="Follow on X"
-            >
-              <svg 
-                viewBox="0 0 24 24" 
-                className="h-5 w-5 fill-[#1aff00]"
-              >
-                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"></path>
-              </svg>
-            </a>
-            <WalletConnect />
-          </div>
+        </div>
+        
+        <div className="flex items-center gap-4">
+          <a href="https://twitter.com" target="_blank" rel="noreferrer" className="hover:scale-110 transition-transform">
+             <svg viewBox="0 0 24 24" className="h-5 w-5 fill-[#1aff00]"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"></path></svg>
+          </a>
+          <WalletConnect />
         </div>
       </header>
 
@@ -188,46 +157,48 @@ export default function Home() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <CountdownTimer seconds={timeRemaining} totalPool={totalPool} />
           <div className="lg:col-span-2">
-            <BetMarquee bets={recentBets} horses={horses} />
+            <BetMarquee horses={horses} bets={recentBets} />
           </div>
         </div>
 
+        {/* The Track with synchronized Reset Logic */}
         <RaceTrack
           horses={horses}
           isRacing={isRacing}
           winningHorseId={lastResult?.winningHorseId}
           finalPositions={racePositions}
+          timeRemaining={timeRemaining}
         />
 
-        <div>
-          <div className="flex justify-between items-center mb-4">
-            <div className="text-lg text-[#1aff00] drop-shadow-[0_0_8px_rgba(26,255,0,0.4)]">PLACE YOUR BETS</div>
+        <div className="space-y-4">
+          <div className="text-lg drop-shadow-[0_0_8px_rgba(26,255,0,0.4)]">
+            {isRacing ? "RACE IN PROGRESS..." : "SELECT YOUR CHAMPION"}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             {horses.map(horse => (
               <HorseCard
                 key={horse.id}
                 horse={horse}
                 onBet={handleBet}
                 disabled={isRacing || timeRemaining === 0}
-                isWinner={lastResult?.winningHorseId === horse.id}
+                isWinner={lastResult?.winningHorseId === horse.id && !isRacing}
               />
             ))}
           </div>
         </div>
-
-        <footer className="text-center py-6 border-t-4 border-[#555] text-[10px] text-[#7CFF7C]">
-          BUILT ON SOLANA • RACES EVERY 1 MINUTE(S)
-        </footer>
       </main>
+
+      <footer className="text-center py-8 border-t-4 border-[#555] text-[10px] opacity-60">
+        NETWORK: SOLANA MAINNET • PROVABLY FAIR RACES
+      </footer>
 
       {/* WINNER MODAL */}
       {showResults && lastResult && (
         <ResultsModal
           result={lastResult}
           horses={horses}
-          userWallet={wallet || undefined}
+          userWallet={wallet?.toString()}
           onClose={() => setShowResults(false)}
         />
       )}
