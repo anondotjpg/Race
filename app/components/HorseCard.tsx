@@ -110,26 +110,21 @@ export function HorseCard({
   return (
     <div
       className={`
-        relative overflow-hidden rounded-2xl transition-all duration-300
+        relative overflow-visible rounded-2xl transition-all duration-300
         ${
           isWinner
-            ? `ring-2 ring-yellow-400 shadow-lg ${colors.glow}`
+            ? `rounded-2xl shadow-lg ${colors.glow}`
             : 'shadow-sm hover:shadow-md'
         }
         ${disabled ? 'opacity-60 pointer-events-none' : ''}
       `}
     >
-      {/* Background */}
-      <div className={`absolute inset-0 bg-gradient-to-br ${colors.bg}`} />
-      <div className="absolute inset-0 bg-white/80" />
+      <div className="absolute inset-0 bg-white/80 rounded-2xl" />
 
       {/* Winner badge */}
       {isWinner && (
-        <div className="absolute top-3 right-3 z-10 flex items-center gap-1 px-2 py-1 bg-yellow-400 rounded-full">
-          <span className="text-xs">👑</span>
-          <span className="text-xs font-semibold text-yellow-900">
-            Winner
-          </span>
+        <div className="absolute -top-5 -right-5 z-10 flex items-center gap-1 px-2 py-1 rounded-full">
+          <span className="text-3xl">👑</span>
         </div>
       )}
 
