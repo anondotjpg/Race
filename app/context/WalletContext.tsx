@@ -15,13 +15,6 @@ interface PhantomProvider {
   off: (event: string, callback: (args: any) => void) => void;
 }
 
-declare global {
-  interface Window {
-    solana?: PhantomProvider;
-    phantom?: { solana?: PhantomProvider };
-  }
-}
-
 interface WalletContextType {
   wallet: string | null;
   connected: boolean;
@@ -44,7 +37,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   // Detect Phantom provider
   useEffect(() => {
     const detectProvider = () => {
-      const phantom = window.phantom?.solana || window.solana;
+      const win = window as any;
+      const phantom = win.phantom?.solana || win.solana;
       
       if (phantom?.isPhantom) {
         setProvider(phantom);
