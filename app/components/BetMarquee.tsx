@@ -1,7 +1,7 @@
 // components/BetMarquee.tsx
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import type { HorseWithOdds } from '../types';
 
 interface Bet {
@@ -18,11 +18,11 @@ interface BetMarqueeProps {
 }
 
 export function BetMarquee({ bets, horses }: BetMarqueeProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [offset, setOffset] = useState(0);
-  const [isPaused, setIsPaused] = useState(false);
-  const [containerWidth, setContainerWidth] = useState(0);
-  const [contentWidth, setContentWidth] = useState(0);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const offsetRef = useRef(0);
+  const isPausedRef = useRef(false);
+  const contentWidthRef = useRef(0);
+  const animationRef = useRef<number>();
 
   const formatWallet = (wallet: string) => 
     `${wallet.slice(0, 4)}...${wallet.slice(-4)}`;
@@ -34,49 +34,54 @@ export function BetMarquee({ bets, horses }: BetMarqueeProps) {
     return `${Math.floor(seconds / 3600)}h ago`;
   };
 
-  const getHorse = (horseId: number) => horses.find(h => h.id === horseId);
+  const getHorse = useCallback((horseId: number) => 
+    horses.find(h => h.id === horseId), [horses]);
 
-  // Measure widths
+  // Animation loop - no React state, pure DOM
   useEffect(() => {
-    if (containerRef.current && bets.length > 0) {
-      setContainerWidth(containerRef.current.offsetWidth);
-      const firstChild = containerRef.current.querySelector('.bet-card');
-      if (firstChild) {
-        const cardWidth = (firstChild as HTMLElement).offsetWidth + 12; // + gap
-        setContentWidth(cardWidth * bets.length);
+    const track = trackRef.current;
+    if (!track || bets.length === 0) return;
+
+    // Measure one set of content
+    const measureContent = () => {
+      const cards = track.querySelectorAll('.bet-card');
+      const numCards = cards.length / 2; // We have 2 copies
+      if (numCards > 0 && cards[0]) {
+        const cardWidth = (cards[0] as HTMLElement).offsetWidth + 12; // gap
+        contentWidthRef.current = cardWidth * numCards;
       }
-    }
-  }, [bets]);
-
-  // Animation loop
-  useEffect(() => {
-    if (bets.length === 0 || contentWidth === 0) return;
-
-    let animationId: number;
-    let lastTime = performance.now();
-
-    const animate = (currentTime: number) => {
-      if (!isPaused) {
-        const delta = currentTime - lastTime;
-        const speed = 50; // pixels per second
-        const movement = (speed * delta) / 1000;
-        
-        setOffset(prev => {
-          const newOffset = prev + movement;
-          // Reset when one full set has scrolled
-          if (newOffset >= contentWidth) {
-            return newOffset - contentWidth;
-          }
-          return newOffset;
-        });
-      }
-      lastTime = currentTime;
-      animationId = requestAnimationFrame(animate);
     };
 
-    animationId = requestAnimationFrame(animate);
-    return () => cancelAnimationFrame(animationId);
-  }, [isPaused, contentWidth, bets.length]);
+    // Initial measure after render
+    requestAnimationFrame(measureContent);
+
+    let lastTime = performance.now();
+    const speed = 50; // pixels per second
+
+    const animate = (currentTime: number) => {
+      if (!isPausedRef.current && contentWidthRef.current > 0) {
+        const delta = currentTime - lastTime;
+        offsetRef.current += (speed * delta) / 1000;
+
+        // Seamless loop: reset when first set scrolls out
+        if (offsetRef.current >= contentWidthRef.current) {
+          offsetRef.current -= contentWidthRef.current;
+        }
+
+        track.style.transform = `translate3d(-${offsetRef.current}px, 0, 0)`;
+      }
+      lastTime = currentTime;
+      animationRef.current = requestAnimationFrame(animate);
+    };
+
+    animationRef.current = requestAnimationFrame(animate);
+
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, [bets.length]);
 
   if (bets.length === 0) {
     return (
@@ -121,9 +126,6 @@ export function BetMarquee({ bets, horses }: BetMarqueeProps) {
     );
   };
 
-  // Calculate how many copies needed to fill screen + buffer
-  const copies = Math.max(3, Math.ceil((containerWidth * 2) / (contentWidth || 1)) + 1);
-
   return (
     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden relative min-h-[88px]">
       {/* Header */}
@@ -141,22 +143,17 @@ export function BetMarquee({ bets, horses }: BetMarqueeProps) {
       {/* Marquee */}
       <div 
         className="pt-10 pb-4 overflow-hidden"
-        onMouseEnter={() => setIsPaused(true)}
-        onMouseLeave={() => setIsPaused(false)}
+        onMouseEnter={() => { isPausedRef.current = true; }}
+        onMouseLeave={() => { isPausedRef.current = false; }}
       >
         <div 
-          ref={containerRef}
-          className="flex gap-3"
-          style={{ 
-            transform: `translateX(-${offset}px)`,
-            width: 'max-content'
-          }}
+          ref={trackRef}
+          className="flex gap-3 will-change-transform"
+          style={{ width: 'max-content' }}
         >
-          {Array.from({ length: copies }).map((_, copyIndex) => (
-            bets.map((bet, betIndex) => (
-              <BetCard key={`${copyIndex}-${betIndex}`} bet={bet} />
-            ))
-          )).flat()}
+          {/* Two identical sets for seamless loop */}
+          {bets.map((bet, i) => <BetCard key={`a-${bet.id}-${i}`} bet={bet} />)}
+          {bets.map((bet, i) => <BetCard key={`b-${bet.id}-${i}`} bet={bet} />)}
         </div>
       </div>
     </div>
