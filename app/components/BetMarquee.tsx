@@ -22,9 +22,9 @@ export function BetMarquee({ bets, horses }: BetMarqueeProps) {
   const offsetRef = useRef(0);
   const isPausedRef = useRef(false);
   const contentWidthRef = useRef(0);
-  const animationRef = useRef<number>();
+  const animationRef = useRef<number | null>(null); // ✅ FIX
 
-  const formatWallet = (wallet: string) => 
+  const formatWallet = (wallet: string) =>
     `${wallet.slice(0, 4)}...${wallet.slice(-4)}`;
 
   const timeAgo = (date: string) => {
@@ -34,42 +34,42 @@ export function BetMarquee({ bets, horses }: BetMarqueeProps) {
     return `${Math.floor(seconds / 3600)}h ago`;
   };
 
-  const getHorse = useCallback((horseId: number) => 
-    horses.find(h => h.id === horseId), [horses]);
+  const getHorse = useCallback(
+    (horseId: number) => horses.find(h => h.id === horseId),
+    [horses]
+  );
 
-  // Animation loop - no React state, pure DOM
   useEffect(() => {
     const track = trackRef.current;
     if (!track || bets.length === 0) return;
 
-    // Measure one set of content
     const measureContent = () => {
       const cards = track.querySelectorAll('.bet-card');
-      const numCards = cards.length / 2; // We have 2 copies
+      const numCards = cards.length / 2;
       if (numCards > 0 && cards[0]) {
-        const cardWidth = (cards[0] as HTMLElement).offsetWidth + 12; // gap
+        const cardWidth =
+          (cards[0] as HTMLElement).offsetWidth + 12;
         contentWidthRef.current = cardWidth * numCards;
       }
     };
 
-    // Initial measure after render
     requestAnimationFrame(measureContent);
 
     let lastTime = performance.now();
-    const speed = 50; // pixels per second
+    const speed = 50;
 
     const animate = (currentTime: number) => {
       if (!isPausedRef.current && contentWidthRef.current > 0) {
         const delta = currentTime - lastTime;
         offsetRef.current += (speed * delta) / 1000;
 
-        // Seamless loop: reset when first set scrolls out
         if (offsetRef.current >= contentWidthRef.current) {
           offsetRef.current -= contentWidthRef.current;
         }
 
         track.style.transform = `translate3d(-${offsetRef.current}px, 0, 0)`;
       }
+
       lastTime = currentTime;
       animationRef.current = requestAnimationFrame(animate);
     };
@@ -77,7 +77,7 @@ export function BetMarquee({ bets, horses }: BetMarqueeProps) {
     animationRef.current = requestAnimationFrame(animate);
 
     return () => {
-      if (animationRef.current) {
+      if (animationRef.current !== null) {
         cancelAnimationFrame(animationRef.current);
       }
     };
@@ -97,10 +97,10 @@ export function BetMarquee({ bets, horses }: BetMarqueeProps) {
   const BetCard = ({ bet }: { bet: Bet }) => {
     const horse = getHorse(bet.horse_id);
     if (!horse) return null;
-    
+
     return (
       <div className="bet-card flex-shrink-0 inline-flex items-center gap-3 px-4 py-3 bg-gray-50 rounded-xl border border-gray-100">
-        <div 
+        <div
           className="w-10 h-10 rounded-xl flex items-center justify-center text-lg flex-shrink-0"
           style={{ backgroundColor: `${horse.color}20` }}
         >
@@ -112,14 +112,21 @@ export function BetMarquee({ bets, horses }: BetMarqueeProps) {
               {bet.amount.toFixed(2)} SOL
             </span>
             <span className="text-gray-400 text-xs">on</span>
-            <span className="font-medium text-sm whitespace-nowrap" style={{ color: horse.color }}>
+            <span
+              className="font-medium text-sm whitespace-nowrap"
+              style={{ color: horse.color }}
+            >
               {horse.name}
             </span>
           </div>
           <div className="flex items-center gap-2 text-xs text-gray-400">
-            <span className="font-mono">{formatWallet(bet.bettor_wallet)}</span>
+            <span className="font-mono">
+              {formatWallet(bet.bettor_wallet)}
+            </span>
             <span>•</span>
-            <span className="whitespace-nowrap">{timeAgo(bet.created_at)}</span>
+            <span className="whitespace-nowrap">
+              {timeAgo(bet.created_at)}
+            </span>
           </div>
         </div>
       </div>
@@ -128,32 +135,36 @@ export function BetMarquee({ bets, horses }: BetMarqueeProps) {
 
   return (
     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden relative min-h-[88px]">
-      {/* Header */}
       <div className="absolute top-0 left-0 z-20 bg-white pt-3 pb-1 px-4">
         <p className="text-xs text-gray-500 font-medium flex items-center gap-2">
           <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
           Live Bets
         </p>
       </div>
-      
-      {/* Gradient fades */}
+
       <div className="absolute left-0 top-0 bottom-0 w-16 bg-gradient-to-r from-white to-transparent z-10 pointer-events-none" />
       <div className="absolute right-0 top-0 bottom-0 w-16 bg-gradient-to-l from-white to-transparent z-10 pointer-events-none" />
-      
-      {/* Marquee */}
-      <div 
+
+      <div
         className="pt-10 pb-4 overflow-hidden"
-        onMouseEnter={() => { isPausedRef.current = true; }}
-        onMouseLeave={() => { isPausedRef.current = false; }}
+        onMouseEnter={() => {
+          isPausedRef.current = true;
+        }}
+        onMouseLeave={() => {
+          isPausedRef.current = false;
+        }}
       >
-        <div 
+        <div
           ref={trackRef}
           className="flex gap-3 will-change-transform"
           style={{ width: 'max-content' }}
         >
-          {/* Two identical sets for seamless loop */}
-          {bets.map((bet, i) => <BetCard key={`a-${bet.id}-${i}`} bet={bet} />)}
-          {bets.map((bet, i) => <BetCard key={`b-${bet.id}-${i}`} bet={bet} />)}
+          {bets.map((bet, i) => (
+            <BetCard key={`a-${bet.id}-${i}`} bet={bet} />
+          ))}
+          {bets.map((bet, i) => (
+            <BetCard key={`b-${bet.id}-${i}`} bet={bet} />
+          ))}
         </div>
       </div>
     </div>
