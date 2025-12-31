@@ -73,11 +73,6 @@ export function CountdownTimer({ seconds, totalPool }: CountdownTimerProps) {
               {String(secs).padStart(2, '0')}
             </span>
           </div>
-          {isCritical && displaySeconds > 0 && (
-            <p className="mt-2 text-xs font-medium text-red-500 animate-pulse">
-              Last chance to bet!
-            </p>
-          )}
         </div>
 
         {totalPool !== undefined && (
