@@ -13,7 +13,7 @@ export function WalletConnect() {
 
   const sunkenStyle = `
     h-[40px] px-3 flex items-center gap-3 bg-black text-[#1aff00]
-    border-2 border-t-[#404040] border-l-[#404040] border-b-[#dfdfdf] border-r-[#dfdfdf]
+    border-2 border-[#404040]
   `;
 
   // 1. NO PROVIDER
@@ -47,7 +47,7 @@ export function WalletConnect() {
     return (
       <div className="flex items-center gap-1">
         <div className={sunkenStyle}>
-          <div className="w-2 h-2 bg-[#1aff00] shadow-[0_0_5px_#1aff00] animate-pulse" />
+          <div className="w-2 h-2 bg-[#1aff00] animate-pulse" />
           <span>{wallet.slice(0, 4)}..{wallet.slice(-4)}</span>
         </div>
         <button 
