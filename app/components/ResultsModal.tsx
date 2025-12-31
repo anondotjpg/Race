@@ -54,7 +54,6 @@ export function ResultsModal({
 
         {/* Winner */}
         <div className="px-6 py-6 text-center">
-          <div className="text-4xl mb-2">{winningHorse?.emoji || '🏇'}</div>
           <div className="text-[10px] text-[#7CFF7C]/60 mb-1">
             WINNER
           </div>
