@@ -56,7 +56,7 @@ export function CountdownTimer({ seconds, totalPool }: CountdownTimerProps) {
             <span
               className={`
                 text-2xl px-1 font-bold
-                ${isCritical ? 'text-yellow-300 animate-pulse' : 'text-[#1aff00]'}
+                ${isCritical ? 'text-yellow-300' : 'text-[#1aff00]'}
               `}
             >
               :
