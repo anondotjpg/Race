@@ -1,7 +1,7 @@
 // lib/race-engine.ts
 import { createServerSupabaseClient } from './supabase';
 import { sendPayout, aggregateFunds } from './solana';
-import type { Bet, RaceResult } from '../types';
+import type { Bet, RaceResult } from '@/types';
 
 const HOUSE_FEE_PERCENT = 5;
 const RACE_DURATION_MS = 5 * 60 * 1000; // 5 minutes betting
@@ -15,23 +15,21 @@ export function determineWinner(
 ): number {
   const total = horseBets.reduce((s, h) => s + h.totalBets, 0);
 
+  // If no bets, random winner (equal chance)
   if (total === 0) {
     return horseBets[Math.floor(Math.random() * horseBets.length)].horseId;
   }
 
-  const weights = horseBets.map(h => ({
-    horseId: h.horseId,
-    weight: total - h.totalBets + total / horseBets.length,
-  }));
+  // Direct proportional: more bets = higher chance to win
+  // 75% of bets on Horse 1 = 75% chance to win
+  let r = Math.random() * total;
 
-  let r = Math.random() * weights.reduce((s, w) => s + w.weight, 0);
-
-  for (const w of weights) {
-    r -= w.weight;
-    if (r <= 0) return w.horseId;
+  for (const h of horseBets) {
+    r -= h.totalBets;
+    if (r <= 0) return h.horseId;
   }
 
-  return weights[weights.length - 1].horseId;
+  return horseBets[horseBets.length - 1].horseId;
 }
 
 export function generateRacePositions(
