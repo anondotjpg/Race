@@ -252,11 +252,11 @@ export async function startNewRace(): Promise<string | null> {
 
   console.log('[startNewRace] Checking for active races...');
 
-  // Check no active race
+  // Only check for 'betting' status (we skip 'racing' now)
   const { data: active, error: activeError } = await supabase
     .from('races')
     .select('id, status')
-    .in('status', ['betting', 'racing'])
+    .eq('status', 'betting')
     .limit(1)
     .maybeSingle();
 
@@ -266,7 +266,7 @@ export async function startNewRace(): Promise<string | null> {
   }
 
   if (active) {
-    console.log('[startNewRace] Active race exists:', active.id, 'status:', active.status);
+    console.log('[startNewRace] Active betting race exists:', active.id);
     return null;
   }
 
