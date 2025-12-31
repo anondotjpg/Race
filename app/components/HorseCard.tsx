@@ -80,9 +80,6 @@ export function HorseCard({
             <div className="text-[#1aff00] text-lg leading-none">
               {horse.name}
             </div>
-            <div className="text-[10px] text-[#7CFF7C] opacity-70">
-              HORSE ID #{horse.id}
-            </div>
           </div>
 
           {hasValidOdds && (

@@ -1,40 +1,68 @@
 // app/layout.tsx
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { WalletProvider } from "./context/WalletContext";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
+// We intentionally go MONO-FIRST for terminal authenticity
 const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+  variable: "--font-mono",
   subsets: ["latin"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "Solana Derby | Horse Racing on Blockchain",
-  description: "Bet SOL on horse races every 5 minutes. Real-time odds, instant payouts.",
-  keywords: ["solana", "horse racing", "betting", "blockchain", "crypto"],
+  title: "Derby",
+  description: "On-chain horse racing terminal. Bet SOL. Live odds. Instant settlement.",
+  keywords: [
+    "solana",
+    "horse racing",
+    "betting",
+    "crypto",
+    "on-chain",
+    "web3",
+  ],
   openGraph: {
     title: "Solana Derby",
-    description: "Bet SOL on horse races every 5 minutes",
+    description: "On-chain horse racing terminal",
     type: "website",
   },
 };
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`
+          ${geistMono.variable}
+          bg-black text-[#1aff00]
+          font-mono uppercase tracking-tight
+          antialiased
+          overflow-x-hidden
+        `}
       >
+        {/* GLOBAL CRT OVERLAY */}
+        <div
+          className="
+            pointer-events-none fixed inset-0 z-[999]
+            opacity-[0.08]
+            bg-[linear-gradient(rgba(0,0,0,0)_50%,rgba(0,0,0,0.35)_50%)]
+            bg-[length:100%_4px]
+          "
+        />
+
+        {/* SUBTLE PHOSPHOR GLOW */}
+        <div
+          className="
+            pointer-events-none fixed inset-0 z-[998]
+            shadow-[inset_0_0_120px_rgba(26,255,0,0.06)]
+          "
+        />
+
         <WalletProvider>
           {children}
         </WalletProvider>

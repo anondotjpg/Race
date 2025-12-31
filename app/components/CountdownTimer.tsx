@@ -1,4 +1,3 @@
-// components/CountdownTimer.tsx
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
@@ -15,13 +14,11 @@ export function CountdownTimer({ seconds, totalPool }: CountdownTimerProps) {
   const lastServerSeconds = useRef(safeSeconds);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Sync from server
+  // Sync from server (unchanged logic)
   useEffect(() => {
-    // New race or server jump forward → snap
     if (safeSeconds > lastServerSeconds.current) {
       setDisplaySeconds(safeSeconds);
     }
-    // Server correction backward → clamp
     if (safeSeconds < displaySeconds) {
       setDisplaySeconds(safeSeconds);
     }
@@ -53,34 +50,65 @@ export function CountdownTimer({ seconds, totalPool }: CountdownTimerProps) {
   return (
     <div
       className={`
-        relative overflow-hidden rounded-2xl border p-5 shadow-sm transition-colors duration-500
-        ${isCritical ? 'border-red-200 bg-red-50/60' : isLow ? 'border-amber-200 bg-amber-50/60' : 'border-gray-200 bg-white'}
+        relative bg-black border-4 border-[#555]
+        font-mono uppercase tracking-tight
       `}
     >
+      {/* CRT scanlines */}
+      <div className="absolute inset-0 pointer-events-none opacity-10 bg-[linear-gradient(rgba(0,0,0,0)_50%,rgba(0,0,0,0.35)_50%)] bg-[length:100%_4px]" />
+
+      {/* CRITICAL FLASH */}
       {isCritical && (
-        <div className="absolute inset-0 bg-red-100/40 animate-pulse pointer-events-none" />
+        <div className="absolute inset-0 bg-red-900/30 animate-pulse pointer-events-none" />
       )}
 
-      <div className="relative flex items-center justify-between">
+      <div className="relative p-4 flex items-center justify-between gap-6">
+        {/* TIMER */}
         <div>
-          <p className="text-xs text-gray-500 mb-1">Next Race In</p>
+          <div className="text-[10px] text-[#7CFF7C] mb-1">
+            NEXT RACE IN
+          </div>
+
           <div className="flex items-baseline gap-1">
-            <span className={`text-3xl font-bold tabular-nums transition-colors ${isCritical ? 'text-red-600' : isLow ? 'text-amber-600' : 'text-gray-900'}`}>
+            <span
+              className={`
+                text-4xl tabular-nums
+                ${isCritical ? 'text-red-500 animate-pulse' : isLow ? 'text-yellow-400' : 'text-[#1aff00]'}
+              `}
+            >
               {String(minutes).padStart(2, '0')}
             </span>
-            <span className={`text-xl transition-colors ${isCritical ? 'text-red-400 animate-pulse' : 'text-gray-400'}`}>:</span>
-            <span className={`text-3xl font-bold tabular-nums transition-colors ${isCritical ? 'text-red-600' : isLow ? 'text-amber-600' : 'text-gray-900'}`}>
+
+            <span
+              className={`
+                text-3xl mx-1
+                ${isCritical ? 'text-red-400 animate-pulse' : 'text-[#7CFF7C]'}
+              `}
+            >
+              :
+            </span>
+
+            <span
+              className={`
+                text-4xl tabular-nums
+                ${isCritical ? 'text-red-500 animate-pulse' : isLow ? 'text-yellow-400' : 'text-[#1aff00]'}
+              `}
+            >
               {String(secs).padStart(2, '0')}
             </span>
           </div>
         </div>
 
+        {/* POOL */}
         {totalPool !== undefined && (
           <div className="text-right">
-            <p className="text-xs text-gray-500 mb-1">Total Pool</p>
-            <p className="text-2xl font-bold text-gray-900">
-              {totalPool.toFixed(2)} <span className="text-sm text-gray-400">SOL</span>
-            </p>
+            <div className="text-[10px] text-[#7CFF7C] mb-1">
+              TOTAL POOL
+            </div>
+            <div className="text-2xl text-yellow-400 tabular-nums">
+              {totalPool.toFixed(2)}
+              <span className="text-xs text-yellow-300 ml-1">SOL</span>
+            </div>
           </div>
         )}
       </div>

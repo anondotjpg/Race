@@ -28,9 +28,9 @@ export function BetMarquee({ bets, horses }: BetMarqueeProps) {
 
   const timeAgo = (date: string) => {
     const seconds = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
-    if (seconds < 60) return 'just now';
-    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
-    return `${Math.floor(seconds / 3600)}h ago`;
+    if (seconds < 60) return 'JUST NOW';
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}M AGO`;
+    return `${Math.floor(seconds / 3600)}H AGO`;
   };
 
   const getHorse = useCallback(
@@ -42,42 +42,41 @@ export function BetMarquee({ bets, horses }: BetMarqueeProps) {
     const track = trackRef.current;
     if (!track || bets.length === 0) return;
 
-    const measureContent = () => {
+    const measure = () => {
       const cards = track.querySelectorAll('.bet-card');
-      const numCards = cards.length / 4; // Adjusted for 4x repeat
-      if (numCards > 0 && cards[0]) {
-        const cardWidth = (cards[0] as HTMLElement).offsetWidth + 12; // card + gap
+      const numCards = cards.length / 4;
+      if (cards[0]) {
+        const cardWidth =
+          (cards[0] as HTMLElement).offsetWidth + 12;
         contentWidthRef.current = cardWidth * numCards;
       }
     };
 
-    requestAnimationFrame(measureContent);
+    requestAnimationFrame(measure);
 
     let lastTime = performance.now();
-    const speed = 50;
+    const speed = 40;
 
-    const animate = (currentTime: number) => {
+    const animate = (now: number) => {
       if (!isPausedRef.current && contentWidthRef.current > 0) {
-        const delta = currentTime - lastTime;
+        const delta = now - lastTime;
         offsetRef.current += (speed * delta) / 1000;
 
         if (offsetRef.current >= contentWidthRef.current) {
           offsetRef.current -= contentWidthRef.current;
         }
 
-        track.style.transform = `translate3d(-${offsetRef.current}px, 0, 0)`;
+        track.style.transform = `translate3d(-${offsetRef.current}px,0,0)`;
       }
 
-      lastTime = currentTime;
+      lastTime = now;
       animationRef.current = requestAnimationFrame(animate);
     };
 
     animationRef.current = requestAnimationFrame(animate);
 
     return () => {
-      if (animationRef.current !== null) {
-        cancelAnimationFrame(animationRef.current);
-      }
+      if (animationRef.current) cancelAnimationFrame(animationRef.current);
     };
   }, [bets.length]);
 
@@ -86,30 +85,41 @@ export function BetMarquee({ bets, horses }: BetMarqueeProps) {
     if (!horse) return null;
 
     return (
-      <div className="bet-card flex-shrink-0 inline-flex items-center gap-3 px-4 py-3 bg-gray-50 rounded-xl border border-gray-100">
+      <div
+        className="
+          bet-card flex-shrink-0
+          border-2 border-[#333]
+          bg-black px-4 py-3
+          flex items-center gap-3
+          font-mono uppercase
+        "
+      >
         <div
-          className="w-10 h-10 rounded-xl flex items-center justify-center text-lg flex-shrink-0"
-          style={{ backgroundColor: `${horse.color}20` }}
+          className="w-10 h-10 border-2 border-[#333] flex items-center justify-center text-lg"
+          style={{ color: horse.color }}
         >
           {horse.emoji}
         </div>
-        <div className="flex flex-col">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-gray-900 text-sm whitespace-nowrap">
+
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-yellow-400 tabular-nums">
               {bet.amount.toFixed(2)} SOL
             </span>
-            <span className="text-gray-400 text-xs">on</span>
+            <span className="text-[#7CFF7C]">ON</span>
             <span
-              className="font-medium text-sm whitespace-nowrap"
-              style={{ color: horse.color }}
+              className="text-[#1aff00] whitespace-nowrap"
             >
               {horse.name}
             </span>
           </div>
-          <div className="flex items-center gap-2 text-xs text-gray-400">
-            <span className="font-mono">{formatWallet(bet.bettor_wallet)}</span>
+
+          <div className="flex items-center gap-2 text-[10px] text-[#7CFF7C] opacity-70">
+            <span className="font-mono">
+              {formatWallet(bet.bettor_wallet)}
+            </span>
             <span>•</span>
-            <span className="whitespace-nowrap">{timeAgo(bet.created_at)}</span>
+            <span>{timeAgo(bet.created_at)}</span>
           </div>
         </div>
       </div>
@@ -117,40 +127,59 @@ export function BetMarquee({ bets, horses }: BetMarqueeProps) {
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden relative h-[116px]">
-      {/* Header Label - Always present to maintain layout */}
-      <div className="absolute top-0 left-0 z-20 bg-white pt-3 pb-1 px-4">
-        <p className="text-xs text-gray-500 font-medium flex items-center gap-2">
-          <span className={`w-2 h-2 rounded-full ${bets.length > 0 ? 'bg-green-500 animate-pulse' : 'bg-gray-300'}`} />
-          Live Bets
-        </p>
+    <div
+      className="
+        relative bg-black border-4 border-[#555]
+        font-mono uppercase tracking-tight
+        overflow-hidden h-[116px]
+      "
+    >
+      {/* CRT scanlines */}
+      <div className="absolute inset-0 pointer-events-none opacity-10 bg-[linear-gradient(rgba(0,0,0,0)_50%,rgba(0,0,0,0.35)_50%)] bg-[length:100%_4px]" />
+
+      {/* HEADER */}
+      <div className="absolute top-0 left-0 right-0 z-20 bg-black px-4 py-2 border-b-2 border-[#333]">
+        <div className="flex items-center gap-2 text-[10px] text-[#7CFF7C]">
+          <span
+            className={`w-2 h-2 rounded-full ${
+              bets.length > 0
+                ? 'bg-red-500 animate-pulse'
+                : 'bg-[#333]'
+            }`}
+          />
+          LIVE BET FEED
+        </div>
       </div>
 
       {bets.length === 0 ? (
-        /* Empty State - Shared container height */
-        <div className="flex flex-col items-center justify-center h-full pt-6">
-          <p className="text-gray-400 text-sm">No bets yet</p>
-          <p className="text-gray-300 text-xs mt-0.5">Be the first to bet!</p>
+        <div className="flex flex-col items-center justify-center h-full pt-6 text-[#7CFF7C]">
+          <div className="text-sm">NO BETS YET</div>
+          <div className="text-[10px] opacity-70">
+            PLACE THE FIRST BET
+          </div>
         </div>
       ) : (
-        /* Marquee State */
         <>
-          <div className="absolute left-0 top-0 bottom-0 w-16 bg-gradient-to-r from-white to-transparent z-10 pointer-events-none" />
-          <div className="absolute right-0 top-0 bottom-0 w-16 bg-gradient-to-l from-white to-transparent z-10 pointer-events-none" />
+          {/* Edge fade */}
+          <div className="absolute left-0 top-0 bottom-0 w-12 bg-gradient-to-r from-black to-transparent z-10 pointer-events-none" />
+          <div className="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-black to-transparent z-10 pointer-events-none" />
 
           <div
-            className="pt-11 pb-4 overflow-hidden"
-            onMouseEnter={() => { isPausedRef.current = true; }}
-            onMouseLeave={() => { isPausedRef.current = false; }}
+            className="pt-10 pb-3 overflow-hidden"
+            onMouseEnter={() => (isPausedRef.current = true)}
+            onMouseLeave={() => (isPausedRef.current = false)}
           >
             <div
               ref={trackRef}
               className="flex gap-3 will-change-transform"
               style={{ width: 'max-content' }}
             >
-              {[...Array(4)].map((_, groupIdx) => 
+              {[...Array(4)].map((_, groupIdx) =>
                 bets.map((bet, i) => (
-                  <BetCard key={`${groupIdx}-${bet.id}-${i}`} bet={bet} />
+                  <BetCard
+                    key={`${groupIdx}-${bet.id}-${i}`}
+                    bet={bet}
+                  />
                 ))
               )}
             </div>
