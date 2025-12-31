@@ -28,11 +28,7 @@ export default function Home() {
   const [betSuccess, setBetSuccess] = useState<string | null>(null);
 
   const handleBet = async (horseId: number, amount: number) => {
-    // Debug log
-    console.log('handleBet called:', { connected, wallet, horseId, amount });
-    
     if (!connected || !wallet) {
-      console.log('Wallet check failed:', { connected, wallet });
       setBetError('Please connect your wallet first');
       setTimeout(() => setBetError(null), 3000);
       return;
