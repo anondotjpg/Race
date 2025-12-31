@@ -1,8 +1,9 @@
+// hooks/useGameState.ts
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { supabase } from '../lib/supabase';
-import type { Race, Bet, HorseWithOdds, RaceResult } from '../types';
+import { supabase } from '@/lib/supabase';
+import type { Race, HorseWithOdds, RaceResult } from '@/types';
 
 interface GameState {
   currentRace: Race | null;
@@ -142,21 +143,14 @@ export function useGameState() {
             const newRace = payload.new as Race;
             console.log('Race update:', newRace.status, newRace.id);
 
-            if (newRace.status === 'racing') {
-              // Race started - trigger animation
+            if (newRace.status === 'finished' && newRace.winning_horse_id) {
+              // Race finished - start animation then show winner
               setState(prev => ({
                 ...prev,
                 currentRace: newRace,
-                isRacing: true,
+                isRacing: true,  // Start animation
                 racePositions: newRace.final_positions || [],
                 lastResult: null
-              }));
-            } else if (newRace.status === 'finished' && newRace.winning_horse_id) {
-              // Race finished - update positions, wait for animation
-              setState(prev => ({
-                ...prev,
-                currentRace: newRace,
-                racePositions: newRace.final_positions || []
               }));
 
               // After 10s animation, show winner
