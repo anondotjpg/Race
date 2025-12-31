@@ -218,7 +218,7 @@ export default function Home() {
         </div>
 
         <footer className="text-center py-6 border-t-4 border-[#555] text-[10px] text-[#7CFF7C]">
-          BUILT ON SOLANA • RACES EVERY 1 MINUTE(S) • V.1.0.4-BETA
+          BUILT ON SOLANA • RACES EVERY 1 MINUTE(S)
         </footer>
       </main>
 
