@@ -1,15 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useGameState } from './hooks/useGameState';
-import { useWallet } from './hooks/useWallet';
-import { RaceTrack } from './components/RaceTrack';
-import { HorseCard } from './components/HorseCard';
-import { CountdownTimer } from './components/CountdownTimer';
-import { WalletConnect } from './components/WalletConnect';
-import { ResultsModal } from './components/ResultsModal';
-import { BetMarquee } from './components/BetMarquee';
-import toast, { Toaster } from 'react-hot-toast';
+import { useGameState } from '@/hooks/useGameState';
+import { useWallet } from '@/context/WalletContext';
+import { RaceTrack } from '@/components/RaceTrack';
+import { HorseCard } from '@/components/HorseCard';
+import { CountdownTimer } from '@/components/CountdownTimer';
+import { WalletConnect } from '@/components/WalletConnect';
+import { ResultsModal } from '@/components/ResultsModal';
+import { BetMarquee } from '@/components/BetMarquee';
 
 export default function Home() {
   const { 
@@ -21,192 +20,249 @@ export default function Home() {
     totalPool,
     racePositions,
     recentBets,
-    loading 
+    loading,
+    refreshRace
   } = useGameState();
   
-  const { wallet } = useWallet();
+  const { wallet, connected } = useWallet();
+  
   const [showResults, setShowResults] = useState(false);
+  const [betError, setBetError] = useState<string | null>(null);
+  const [betSuccess, setBetSuccess] = useState<string | null>(null);
   const [lastShownResultId, setLastShownResultId] = useState<string | null>(null);
-  const [isVisualizing, setIsVisualizing] = useState(false);
 
-  // Retro UI Toast Styles
-  const toastStyle = {
-    borderRadius: '0px',
-    background: '#000',
-    color: '#1aff00',
-    border: '4px solid #1aff00',
-    fontFamily: 'monospace',
-    textTransform: 'uppercase' as const,
-    fontSize: '12px',
-    boxShadow: '0 0 15px rgba(26,255,0,0.2)',
-  };
-
-  const errorStyle = {
-    ...toastStyle,
-    color: '#ff4444',
-    border: '4px solid #ff4444',
-    boxShadow: '0 0 15px rgba(239,68,68,0.2)',
-  };
-
+  // Debug: log when lastResult changes
   useEffect(() => {
-    if (isRacing) setIsVisualizing(true);
-  }, [isRacing]);
+    console.log('lastResult changed:', lastResult);
+    console.log('isRacing:', isRacing);
+    console.log('showResults:', showResults);
+  }, [lastResult, isRacing, showResults]);
 
+  // Show results modal when race finishes
   useEffect(() => {
     if (lastResult && !isRacing && lastResult.raceId !== lastShownResultId) {
-      const t = setTimeout(() => {
+      console.log('Triggering results modal for race:', lastResult.raceId);
+      const timer = setTimeout(() => {
         setShowResults(true);
         setLastShownResultId(lastResult.raceId);
-        setIsVisualizing(false); 
-      }, 8500); 
-      return () => clearTimeout(t);
+      }, 500); // Reduced delay
+      return () => clearTimeout(timer);
     }
   }, [lastResult, isRacing, lastShownResultId]);
 
+  // Reset when new race starts
   useEffect(() => {
-    if (isRacing && showResults) setShowResults(false);
-  }, [isRacing, showResults]);
+    if (currentRace?.status === 'betting' && showResults) {
+      setShowResults(false);
+    }
+  }, [currentRace?.status, showResults]);
 
   const handleBet = async (horseId: number, amount: number) => {
+    console.log('handleBet called:', { horseId, amount });
+    
+    // Get Phantom directly from window
     const win = window as any;
     const phantom = win.phantom?.solana || win.solana;
+    
+    console.log('Phantom check:', { 
+      hasPhantom: !!phantom, 
+      isConnected: phantom?.isConnected, 
+      hasPublicKey: !!phantom?.publicKey 
+    });
+    
     if (!phantom?.isConnected || !phantom?.publicKey) {
-      toast.error('Connect Wallet First', { style: errorStyle });
+      console.log('Not connected, showing error');
+      setBetError('Please connect your wallet first');
+      setTimeout(() => setBetError(null), 3000);
       return;
     }
+    
+    console.log('Wallet connected, checking race...');
+
+    if (!currentRace) {
+      console.log('No current race');
+      setBetError('No active race');
+      setTimeout(() => setBetError(null), 3000);
+      return;
+    }
+
     const horse = horses.find(h => h.id === horseId);
-    const loadingToast = toast.loading('Processing Transaction...', { style: toastStyle });
+    if (!horse) {
+      console.log('Horse not found');
+      setBetError('Horse not found');
+      setTimeout(() => setBetError(null), 3000);
+      return;
+    }
+
+    console.log('Placing bet for horse:', horse.name, 'wallet:', horse.wallet_address);
+    
+    setBetError(null);
+    setBetSuccess(null);
+
     try {
+      // Import required classes
       const { PublicKey, Transaction, SystemProgram, Connection, LAMPORTS_PER_SOL } = await import('@solana/web3.js');
+      
+      const currentWallet = phantom.publicKey.toBase58();
       const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC || 'https://api.mainnet-beta.solana.com';
+      
+      console.log('Creating transaction...', { from: currentWallet, to: horse.wallet_address, amount });
+      
       const connection = new Connection(rpcUrl, 'confirmed');
-      const fromPubkey = new PublicKey(phantom.publicKey.toBase58());
-      const toPubkey = new PublicKey(horse!.wallet_address);
+      const fromPubkey = new PublicKey(currentWallet);
+      const toPubkey = new PublicKey(horse.wallet_address);
       const lamports = Math.floor(amount * LAMPORTS_PER_SOL);
+      
+      console.log('Getting blockhash...');
       const { blockhash } = await connection.getLatestBlockhash('confirmed');
-      const transaction = new Transaction().add(SystemProgram.transfer({ fromPubkey, toPubkey, lamports }));
+      console.log('Got blockhash:', blockhash);
+      
+      const transaction = new Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey,
+          toPubkey,
+          lamports,
+        })
+      );
+      
       transaction.recentBlockhash = blockhash;
       transaction.feePayer = fromPubkey;
+      
+      console.log('Requesting Phantom signature...');
       const { signature } = await phantom.signAndSendTransaction(transaction);
+      console.log('Transaction sent:', signature);
+      
+      if (!signature) {
+        setBetError('Transaction cancelled');
+        setTimeout(() => setBetError(null), 3000);
+        return;
+      }
+
       const res = await fetch('/api/bet', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          raceId: currentRace?.id,
+          raceId: currentRace.id,
           horseId,
           txSignature: signature,
-          bettorWallet: phantom.publicKey.toBase58(),
-        }),
+          bettorWallet: currentWallet
+        })
       });
-      if (!res.ok) throw new Error('Failed to record bet');
-      toast.success(`Bet Placed: ${amount} SOL on ${horse?.name}`, { 
-        id: loadingToast, 
-        style: toastStyle,
-        icon: '🐎'
-      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setBetError(data.error || 'Failed to record bet');
+        setTimeout(() => setBetError(null), 3000);
+        return;
+      }
+
+      setBetSuccess(`${amount} SOL on ${horse.name}`);
+      setTimeout(() => setBetSuccess(null), 5000);
     } catch (error: any) {
-      toast.dismiss(loadingToast);
-      const msg = error?.message?.includes('User rejected') ? 'Cancelled' : 'Bet Failed';
-      toast.error(msg, { style: errorStyle });
+      console.error('Bet error:', error);
+      if (error?.message?.includes('User rejected')) {
+        setBetError('Transaction cancelled');
+      } else {
+        const msg = error?.message || 'Bet failed';
+        setBetError(msg.length > 50 ? msg.slice(0, 50) + '...' : msg);
+      }
+      setTimeout(() => setBetError(null), 5000);
     }
-  };  
+  };
 
   if (loading) {
     return (
-      <div className="fixed inset-0 z-[100] bg-black flex items-center justify-center overflow-hidden">
-        {/* Subtle, soft glow for main loader */}
-        <img 
-          src="/load.gif" 
-          alt="Loading" 
-          className="w-[30vmin] pixelated drop-shadow-[0_0_12px_rgba(26,255,0,0.3)] opacity-90" 
-        />
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-gray-200 border-t-gray-900 rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-gray-500">Loading race...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-black font-mono uppercase tracking-tight text-[#1aff00]">
-      <Toaster position="top-right" reverseOrder={false} />
-      <div className="fixed inset-0 pointer-events-none opacity-10 z-[5] bg-[linear-gradient(rgba(0,0,0,0)_50%,rgba(0,0,0,0.35)_50%)] bg-[length:100%_4px]" />
-
-      <header className="sticky top-0 z-40 bg-black">
-        <div className="max-w-7xl mx-auto px-4 py-3 grid grid-cols-3 items-center">
-          <div className="flex items-center">
-            {/* Very subtle glow for logo */}
-            <img 
-              src="/load.gif" 
-              alt="Logo" 
-              className="h-12 w-auto pixelated drop-shadow-[0_0_8px_rgba(26,255,0,0.4)]" 
-            />
-          </div>
-          <div className="text-center text-sm drop-shadow-[0_0_5px_rgba(26,255,0,0.2)] font-semibold invisible md:visible">
-            {currentRace ? `RACE #${currentRace.race_number}` : 'NO ACTIVE RACE'}
-          </div>
-          <div className="flex justify-end items-center gap-6">
-            <a
-              href="https://x.com/derbydegen/status/2006466176797520034"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:opacity-70 transition-opacity"
-            >
-              <p className="text-base normal-case">[ how it works ]</p>
-            </a>
-            <a href="https://x.com/derbydegen" target="_blank" rel="noopener noreferrer" className="hover:opacity-70 transition-opacity">
-              <svg viewBox="0 0 24 24" className="h-5 w-5 fill-[#1aff00]">
-                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"></path>
-              </svg>
-            </a>
+    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100">
+      {/* Header */}
+      <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-gray-200/50">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                <span className="text-xl">🏇</span>
+              </div>
+              <div>
+                <h1 className="text-xl font-bold text-gray-900">Solana Derby</h1>
+                {currentRace && (
+                  <p className="text-xs text-gray-500">Race #{currentRace.race_number}</p>
+                )}
+              </div>
+            </div>
             <WalletConnect />
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-6 space-y-6 relative z-10">
-        
-        <div className="flex flex-col lg:flex-row gap-4 items-stretch">
-          <div className={`lg:w-1/3 flex ${isVisualizing ? "opacity-20 grayscale pointer-events-none transition-all" : "transition-all"}`}>
-            <div className="w-full flex flex-col h-32 md:h-full">
-               <CountdownTimer seconds={timeRemaining} totalPool={totalPool} />
-            </div>
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+        {/* Alerts */}
+        {betError && (
+          <div className="p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3">
+            <span className="text-red-500">⚠️</span>
+            <p className="text-red-700 text-sm font-medium">{betError}</p>
           </div>
-          
-          <div className="lg:w-2/3 flex">
-            <div className="w-full flex flex-col h-full">
-              <BetMarquee bets={recentBets} horses={horses} />
-            </div>
+        )}
+        
+        {betSuccess && (
+          <div className="p-4 bg-green-50 border border-green-200 rounded-xl flex items-center gap-3">
+            <span className="text-green-500">✓</span>
+            <p className="text-green-700 text-sm font-medium">Bet placed: {betSuccess}</p>
+          </div>
+        )}
+
+        {/* Timer & Live Bets Marquee */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <CountdownTimer seconds={timeRemaining} totalPool={totalPool} onRaceEnd={refreshRace} />
+          <div className="lg:col-span-2">
+            <BetMarquee bets={recentBets} horses={horses} />
           </div>
         </div>
 
-        <RaceTrack
-          horses={horses}
+        {/* Race Track */}
+        <RaceTrack 
+          horses={horses} 
           isRacing={isRacing}
           winningHorseId={lastResult?.winningHorseId}
-          finalPositions={racePositions} 
-          timeRemaining={timeRemaining}
+          finalPositions={racePositions}
         />
 
+        {/* Horses Grid */}
         <div>
-          <div className="flex justify-between items-center mb-4">
-            <div className="text-lg text-[#1aff00] drop-shadow-[0_0_8px_rgba(26,255,0,0.4)]">
-              {isVisualizing ? "RACE IN PROGRESS" : "PLACE YOUR BETS"}
-            </div>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">Place Your Bets</h2>
+            <p className="text-sm text-gray-500">
+              {isRacing ? 'Race in progress...' : 'Select a horse to bet'}
+            </p>
           </div>
-
-          <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 transition-all ${isVisualizing ? "opacity-40 grayscale pointer-events-none" : ""}`}>
-            {horses.map(horse => (
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {horses.map((horse) => (
               <HorseCard
                 key={horse.id}
                 horse={horse}
                 onBet={handleBet}
-                disabled={isVisualizing || isRacing || timeRemaining === 0}
-                isWinner={lastResult?.winningHorseId === horse.id && !isVisualizing}
+                disabled={isRacing || timeRemaining === 0}
+                isWinner={lastResult?.winningHorseId === horse.id}
               />
             ))}
           </div>
         </div>
 
-        <footer className="text-center py-6 text-[10px] text-[#7CFF7C]">
-          BUILT ON SOLANA • ON-CHAIN HORSE RACES
+        {/* Footer */}
+        <footer className="text-center py-8 border-t border-gray-200">
+          <p className="text-sm text-gray-400">
+            Built on Solana • Races every 5 minutes
+          </p>
         </footer>
       </main>
 
@@ -214,7 +270,7 @@ export default function Home() {
         <ResultsModal
           result={lastResult}
           horses={horses}
-          userWallet={wallet?.toString()}
+          userWallet={wallet || undefined}
           onClose={() => setShowResults(false)}
         />
       )}
