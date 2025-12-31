@@ -33,34 +33,48 @@ export async function createPumpPortalWallet(): Promise<{
   privateKey: string;
   apiKey?: string;
 }> {
+  console.log('🔵 Starting PumpPortal wallet creation...');
+  
   try {
+    console.log('🔵 Fetching from https://pumpportal.fun/api/create-wallet');
     const response = await fetch('https://pumpportal.fun/api/create-wallet', {
       method: 'GET',
     });
+    
+    console.log('🔵 Response status:', response.status);
     
     if (!response.ok) {
       throw new Error(`PumpPortal API error: ${response.status}`);
     }
     
     const data = await response.json();
+    console.log('🔵 PumpPortal raw response:', JSON.stringify(data, null, 2));
     
     // PumpPortal returns: walletPublicKey, privateKey, apiKey
     const publicKey = data.walletPublicKey;
     const privateKey = data.privateKey;
     const apiKey = data.apiKey;
     
+    console.log('🔵 Extracted publicKey:', publicKey);
+    console.log('🔵 Extracted privateKey:', privateKey ? `${privateKey.slice(0, 10)}...` : 'MISSING');
+    console.log('🔵 Extracted apiKey:', apiKey ? `${apiKey.slice(0, 10)}...` : 'MISSING');
+    
     if (!publicKey || !privateKey) {
+      console.log('🔴 Missing keys! publicKey:', !!publicKey, 'privateKey:', !!privateKey);
       throw new Error('Missing keys in PumpPortal response');
     }
     
-    console.log('PumpPortal wallet created:', publicKey);
+    console.log('🟢 PumpPortal wallet created successfully:', publicKey);
     
     return { publicKey, privateKey, apiKey };
   } catch (error) {
-    console.error('PumpPortal failed, using local generation:', error);
+    console.error('🔴 PumpPortal failed:', error);
+    console.log('🟡 Falling back to local wallet generation...');
     const keypair = Keypair.generate();
+    const publicKey = keypair.publicKey.toBase58();
+    console.log('🟢 Local wallet generated:', publicKey);
     return {
-      publicKey: keypair.publicKey.toBase58(),
+      publicKey,
       privateKey: bs58.encode(keypair.secretKey),
     };
   }
@@ -188,15 +202,18 @@ export async function aggregateFunds(
 ): Promise<number> {
   let totalCollected = 0;
   
+  // Minimum balance to keep account rent-exempt (~0.00089 SOL) + tx fee
+  const MIN_BALANCE_LAMPORTS = 900000; // ~0.0009 SOL
+  
   for (const privateKey of horsePrivateKeys) {
     try {
       const keypair = Keypair.fromSecretKey(bs58.decode(privateKey));
       const balance = await connection.getBalance(keypair.publicKey);
       
-      // Leave some for transaction fees
-      const sendAmount = balance - 10000; // Keep 0.00001 SOL for fees
+      // Only send if we have more than minimum + some buffer
+      const sendAmount = balance - MIN_BALANCE_LAMPORTS;
       
-      if (sendAmount > 0) {
+      if (sendAmount > 10000) { // Only send if > 0.00001 SOL profit
         const transaction = new Transaction().add(
           SystemProgram.transfer({
             fromPubkey: keypair.publicKey,
@@ -207,6 +224,7 @@ export async function aggregateFunds(
         
         await sendAndConfirmTransaction(connection, transaction, [keypair]);
         totalCollected += sendAmount / LAMPORTS_PER_SOL;
+        console.log(`Aggregated ${sendAmount / LAMPORTS_PER_SOL} SOL from ${keypair.publicKey.toBase58()}`);
       }
     } catch (error) {
       console.error('Failed to aggregate from wallet:', error);
