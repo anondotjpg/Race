@@ -34,17 +34,26 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Debug: log state changes
+  useEffect(() => {
+    console.log('WalletProvider state:', { wallet, hasProvider: !!provider, connecting });
+  }, [wallet, provider, connecting]);
+
   // Detect Phantom provider
   useEffect(() => {
     const detectProvider = () => {
       const win = window as any;
       const phantom = win.phantom?.solana || win.solana;
       
+      console.log('detectProvider:', { phantom: !!phantom, isPhantom: phantom?.isPhantom });
+      
       if (phantom?.isPhantom) {
         setProvider(phantom);
         
         if (phantom.isConnected && phantom.publicKey) {
-          setWallet(phantom.publicKey.toBase58());
+          const addr = phantom.publicKey.toBase58();
+          console.log('Already connected:', addr);
+          setWallet(addr);
         }
         return true;
       }
@@ -69,17 +78,22 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
     const handleConnect = () => {
       if (provider.publicKey) {
-        setWallet(provider.publicKey.toBase58());
+        const addr = provider.publicKey.toBase58();
+        console.log('Wallet connected event:', addr);
+        setWallet(addr);
       }
     };
 
     const handleDisconnect = () => {
+      console.log('Wallet disconnected event');
       setWallet(null);
     };
 
     const handleAccountChange = (publicKey: PublicKey | null) => {
       if (publicKey) {
-        setWallet(publicKey.toBase58());
+        const addr = publicKey.toBase58();
+        console.log('Account changed:', addr);
+        setWallet(addr);
       } else {
         setWallet(null);
       }
@@ -105,9 +119,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     try {
       setConnecting(true);
       setError(null);
+      console.log('Connecting to Phantom...');
       const response = await provider.connect();
-      setWallet(response.publicKey.toBase58());
+      const addr = response.publicKey.toBase58();
+      console.log('Connected successfully:', addr);
+      setWallet(addr);
     } catch (err: any) {
+      console.error('Connect error:', err);
       setError(err.message || 'Failed to connect');
     } finally {
       setConnecting(false);
