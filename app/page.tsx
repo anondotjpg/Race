@@ -161,12 +161,11 @@ export default function Home() {
           </div>
         </div>
 
-        {/* The Track with synchronized Reset Logic */}
         <RaceTrack
           horses={horses}
           isRacing={isRacing}
-          winningHorseId={lastResult?.winningHorseId}
-          finalPositions={racePositions}
+          winningHorseId={lastResult?.winningHorseId} // For the "Winner" label highlight
+          finalPositions={racePositions} // CRITICAL: This dictates who physically crosses first
           timeRemaining={timeRemaining}
         />
 
