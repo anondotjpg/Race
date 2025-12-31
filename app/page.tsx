@@ -136,7 +136,7 @@ export default function Home() {
             <img 
               src="/load.gif" 
               alt="Logo" 
-              className="h-10 w-auto pixelated drop-shadow-[0_0_8px_rgba(26,255,0,0.4)]" 
+              className="h-12 w-auto pixelated drop-shadow-[0_0_8px_rgba(26,255,0,0.4)]" 
             />
           </div>
           <div className="text-center text-sm drop-shadow-[0_0_5px_rgba(26,255,0,0.2)] font-semibold invisible md:visible">
