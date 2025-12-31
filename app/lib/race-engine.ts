@@ -1,4 +1,4 @@
-// lib/race-engine.ts
+// app/lib/race-engine.ts
 import { createServerSupabaseClient } from './supabase';
 import type { Bet, RaceResult } from '../types';
 
@@ -50,7 +50,7 @@ export function generateRacePositions(
 export function calculatePayouts(
   winnerId: number,
   bets: Bet[]
-) {
+): { betId: string; wallet: string; amount: number }[] {
   const winners = bets.filter(b => b.horse_id === winnerId);
   const losers = bets.filter(b => b.horse_id !== winnerId);
 
@@ -78,7 +78,7 @@ export async function executeRace(
 ): Promise<RaceResult | null> {
   const supabase = createServerSupabaseClient();
 
-  // Lock race by state transition
+  // Fetch race
   const { data: race } = await supabase
     .from('races')
     .select('*')
@@ -87,13 +87,14 @@ export async function executeRace(
 
   if (!race || race.status !== 'betting') return null;
 
-  // Move to racing
+  // Lock race
   await supabase
     .from('races')
     .update({ status: 'racing' })
     .eq('id', raceId)
     .eq('status', 'betting');
 
+  // Fetch horses + bets
   const { data: horses } = await supabase.from('horses').select('*');
   const { data: bets } = await supabase
     .from('bets')
@@ -111,6 +112,8 @@ export async function executeRace(
   }));
 
   const winnerId = determineWinner(horseTotals);
+  const winningHorse = horses.find(h => h.id === winnerId);
+
   const positions = generateRacePositions(
     winnerId,
     horses.map(h => h.id)
@@ -153,9 +156,11 @@ export async function executeRace(
     });
   }
 
+  // ✅ RETURN FULL RaceResult (OPTION A)
   return {
     raceId,
     winningHorseId: winnerId,
+    winningHorseName: winningHorse?.name ?? 'Unknown',
     positions,
     payouts: payouts.map(p => ({
       wallet: p.wallet,
@@ -165,14 +170,14 @@ export async function executeRace(
 }
 
 // ─────────────────────────────────────────────
-// START NEW RACE (HARD GUARANTEES)
+// START NEW RACE (5-MIN GUARANTEE)
 // ─────────────────────────────────────────────
 
 export async function startNewRace(): Promise<string | null> {
   const supabase = createServerSupabaseClient();
   const now = Date.now();
 
-  // Enforce 5-minute window
+  // Enforce one race per 5 minutes
   const { data: recent } = await supabase
     .from('races')
     .select('id')
@@ -195,16 +200,13 @@ export async function startNewRace(): Promise<string | null> {
     .select('id')
     .single();
 
-  if (error) {
-    // expected if another cron won
-    return null;
-  }
+  if (error) return null;
 
   return data.id;
 }
 
 // ─────────────────────────────────────────────
-// RECORD BET (IDEMPOTENT + SAFE)
+// RECORD BET (IDEMPOTENT)
 // ─────────────────────────────────────────────
 
 export async function recordBet(
@@ -217,7 +219,6 @@ export async function recordBet(
   const supabase = createServerSupabaseClient();
 
   try {
-    // 1️⃣ Verify race is open for betting
     const { data: race } = await supabase
       .from('races')
       .select('status, betting_ends_at')
@@ -227,20 +228,17 @@ export async function recordBet(
     if (!race || race.status !== 'betting') return false;
     if (new Date(race.betting_ends_at) <= new Date()) return false;
 
-    // 2️⃣ Enforce tx replay protection
+    // Prevent tx replay
     const { data: existing } = await supabase
       .from('bets')
       .select('id')
       .eq('tx_signature', txSignature)
       .maybeSingle();
 
-    if (existing) {
-      // already recorded — idempotent success
-      return true;
-    }
+    if (existing) return true;
 
-    // 3️⃣ Insert bet
-    const { error: betError } = await supabase
+    // Insert bet
+    const { error } = await supabase
       .from('bets')
       .insert({
         race_id: raceId,
@@ -251,9 +249,9 @@ export async function recordBet(
         status: 'confirmed',
       });
 
-    if (betError) throw betError;
+    if (error) throw error;
 
-    // 4️⃣ Update race total pool
+    // Atomic pool increment
     await supabase.rpc('increment_race_pool', {
       race_id_input: raceId,
       amount_input: amount,
