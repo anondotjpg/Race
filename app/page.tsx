@@ -27,11 +27,9 @@ export default function Home() {
   const { wallet } = useWallet();
   const [showResults, setShowResults] = useState(false);
   const [lastShownResultId, setLastShownResultId] = useState<string | null>(null);
-  
-  // New state to keep the UI in "Race Mode" regardless of backend timer
   const [isVisualizing, setIsVisualizing] = useState(false);
 
-  // --- Retro UI Toast Styles ---
+  // Retro UI Toast Styles
   const toastStyle = {
     borderRadius: '0px',
     background: '#000',
@@ -50,72 +48,46 @@ export default function Home() {
     boxShadow: '0 0 15px rgba(239,68,68,0.2)',
   };
 
-  /**
-   * MANAGE VISUALIZATION STATE
-   * When isRacing flips to true, we lock the UI.
-   * We only unlock it 8.5 seconds later.
-   */
   useEffect(() => {
-    if (isRacing) {
-      setIsVisualizing(true);
-    }
+    if (isRacing) setIsVisualizing(true);
   }, [isRacing]);
 
-  /**
-   * TRIGGER RESULTS MODAL & UNLOCK UI
-   * After 8.5s (8s race + 0.5s pause), show results and allow betting/timer to reappear.
-   */
   useEffect(() => {
     if (lastResult && !isRacing && lastResult.raceId !== lastShownResultId) {
       const t = setTimeout(() => {
         setShowResults(true);
         setLastShownResultId(lastResult.raceId);
-        setIsVisualizing(false); // Unlock the UI (Timer and Bets)
+        setIsVisualizing(false); 
       }, 8500); 
       return () => clearTimeout(t);
     }
   }, [lastResult, isRacing, lastShownResultId]);
 
-  /**
-   * CLEANUP
-   */
   useEffect(() => {
-    if (isRacing && showResults) {
-      setShowResults(false);
-    }
+    if (isRacing && showResults) setShowResults(false);
   }, [isRacing, showResults]);
 
-  /**
-   * SOLANA TRANSACTION HANDLER
-   */
   const handleBet = async (horseId: number, amount: number) => {
     const win = window as any;
     const phantom = win.phantom?.solana || win.solana;
-  
     if (!phantom?.isConnected || !phantom?.publicKey) {
       toast.error('Connect Wallet First', { style: errorStyle });
       return;
     }
-  
     const horse = horses.find(h => h.id === horseId);
     const loadingToast = toast.loading('Processing Transaction...', { style: toastStyle });
-  
     try {
       const { PublicKey, Transaction, SystemProgram, Connection, LAMPORTS_PER_SOL } = await import('@solana/web3.js');
-  
       const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC || 'https://api.mainnet-beta.solana.com';
       const connection = new Connection(rpcUrl, 'confirmed');
       const fromPubkey = new PublicKey(phantom.publicKey.toBase58());
       const toPubkey = new PublicKey(horse!.wallet_address);
       const lamports = Math.floor(amount * LAMPORTS_PER_SOL);
-  
       const { blockhash } = await connection.getLatestBlockhash('confirmed');
       const transaction = new Transaction().add(SystemProgram.transfer({ fromPubkey, toPubkey, lamports }));
       transaction.recentBlockhash = blockhash;
       transaction.feePayer = fromPubkey;
-  
       const { signature } = await phantom.signAndSendTransaction(transaction);
-  
       const res = await fetch('/api/bet', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -126,15 +98,12 @@ export default function Home() {
           bettorWallet: phantom.publicKey.toBase58(),
         }),
       });
-  
       if (!res.ok) throw new Error('Failed to record bet');
-
       toast.success(`Bet Placed: ${amount} SOL on ${horse?.name}`, { 
         id: loadingToast, 
         style: toastStyle,
         icon: '🐎'
       });
-
     } catch (error: any) {
       toast.dismiss(loadingToast);
       const msg = error?.message?.includes('User rejected') ? 'Cancelled' : 'Bet Failed';
@@ -153,7 +122,6 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-black font-mono uppercase tracking-tight text-[#1aff00]">
       <Toaster position="top-right" reverseOrder={false} />
-
       <div className="fixed inset-0 pointer-events-none opacity-10 z-[5] bg-[linear-gradient(rgba(0,0,0,0)_50%,rgba(0,0,0,0.35)_50%)] bg-[length:100%_4px]" />
 
       <header className="sticky top-0 z-40 bg-black border-b-4 border-[#555]">
@@ -161,19 +129,11 @@ export default function Home() {
           <div className="flex items-center">
             <img src="/load.gif" alt="Logo" className="h-10 w-auto pixelated" />
           </div>
-          
           <div className="text-center text-sm drop-shadow-[0_0_5px_rgba(26,255,0,0.2)] font-semibold">
             {currentRace ? `RACE #${currentRace.race_number}` : 'NO ACTIVE RACE'}
           </div>
-
           <div className="flex justify-end items-center gap-6">
-            <a 
-              href="https://twitter.com" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="hover:scale-110 transition-transform"
-              aria-label="Follow on X"
-            >
+            <a href="https://twitter.com" target="_blank" rel="noopener noreferrer" className="hover:scale-110 transition-transform">
               <svg viewBox="0 0 24 24" className="h-5 w-5 fill-[#1aff00]">
                 <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"></path>
               </svg>
@@ -184,13 +144,21 @@ export default function Home() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-6 space-y-6 relative z-10">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* Timer is blurred/hidden during visualization to prevent confusion */}
-          <div className={isVisualizing ? "opacity-20 grayscale pointer-events-none transition-all" : "transition-all"}>
-            <CountdownTimer seconds={timeRemaining} totalPool={totalPool} />
+        
+        {/* SYNCED HEIGHT SECTION */}
+        <div className="flex flex-col lg:flex-row gap-4 items-stretch">
+          {/* Timer Wrapper */}
+          <div className={`lg:w-1/3 flex ${isVisualizing ? "opacity-20 grayscale pointer-events-none transition-all" : "transition-all"}`}>
+            <div className="w-full flex flex-col h-full">
+               <CountdownTimer seconds={timeRemaining} totalPool={totalPool} />
+            </div>
           </div>
-          <div className="lg:col-span-2">
-            <BetMarquee bets={recentBets} horses={horses} />
+          
+          {/* Marquee Wrapper */}
+          <div className="lg:w-2/3 flex">
+            <div className="w-full flex flex-col h-full">
+              <BetMarquee bets={recentBets} horses={horses} />
+            </div>
           </div>
         </div>
 
@@ -209,7 +177,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Horse Cards are disabled and faded during visualization */}
           <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 transition-all ${isVisualizing ? "opacity-40 grayscale pointer-events-none" : ""}`}>
             {horses.map(horse => (
               <HorseCard

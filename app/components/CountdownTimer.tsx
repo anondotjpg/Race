@@ -32,8 +32,11 @@ export function CountdownTimer({ seconds, totalPool }: CountdownTimerProps) {
   const isCritical = displaySeconds <= 30;
 
   return (
-    <div className="bg-[#c0c0c0] p-1 border-2 border-t-[#dfdfdf] border-l-[#dfdfdf] border-b-[#404040] border-r-[#404040] font-mono">
-      <div className="relative bg-black border-2 border-t-[#404040] border-l-[#404040] border-b-[#dfdfdf] border-r-[#dfdfdf] overflow-hidden">
+    /* Changed to h-full and flex flex-col */
+    <div className="h-full bg-[#c0c0c0] p-1 border-2 border-t-[#dfdfdf] border-l-[#dfdfdf] border-b-[#404040] border-r-[#404040] font-mono flex flex-col">
+      
+      {/* Changed to flex-1 and h-full to fill available vertical space */}
+      <div className="relative flex-1 bg-black border-2 border-t-[#404040] border-l-[#404040] border-b-[#dfdfdf] border-r-[#dfdfdf] overflow-hidden">
 
         {/* CRT Scanlines */}
         <div className="absolute inset-0 pointer-events-none opacity-10
@@ -41,7 +44,8 @@ export function CountdownTimer({ seconds, totalPool }: CountdownTimerProps) {
           bg-[length:100%_2px]"
         />
 
-        <div className="relative z-10 p-3 flex items-center justify-between gap-8">
+        {/* Added h-full and justify-center to center content within the stretched box */}
+        <div className="relative z-10 p-3 flex h-full items-center justify-between gap-8">
           {/* TIMER */}
           <div className="flex items-baseline leading-none uppercase">
             <span
@@ -87,7 +91,7 @@ export function CountdownTimer({ seconds, totalPool }: CountdownTimerProps) {
         </div>
       </div>
 
-      {/* Retro Status Bar */}
+      {/* Retro Status Bar - Fixed at bottom */}
       <div className="mt-1 flex justify-between text-[10px] text-[#404040] px-1 font-bold uppercase">
         <span>STATUS: {isCritical ? 'APPROACHING' : 'OPEN'}</span>
         <span>
