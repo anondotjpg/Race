@@ -6,11 +6,11 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const raceId = searchParams.get('raceId');
   
-  const serverSupabase = createServerSupabaseClient();
+  const supabase = createServerSupabaseClient();
   
   try {
     // Get all horses (without private keys)
-    const { data: horses, error: horsesError } = await serverSupabase
+    const { data: horses, error: horsesError } = await supabase
       .from('horses')
       .select('id, name, color, emoji, wallet_address, created_at');
     
@@ -18,19 +18,14 @@ export async function GET(request: NextRequest) {
     
     // If raceId provided, get odds for that race
     if (raceId) {
-      const { data: bets } = await serverSupabase
+      const { data: bets } = await supabase
         .from('bets')
         .select('horse_id, amount')
         .eq('race_id', raceId)
         .eq('status', 'confirmed');
       
-      const { data: race } = await serverSupabase
-        .from('races')
-        .select('total_pool')
-        .eq('id', raceId)
-        .single();
-      
-      const totalPool = race?.total_pool || 0;
+      // Calculate total pool from actual bets (source of truth)
+      const totalPool = bets?.reduce((sum, b) => sum + b.amount, 0) || 0;
       
       const horsesWithOdds = horses?.map(horse => {
         const horseBets = bets?.filter(b => b.horse_id === horse.id) || [];

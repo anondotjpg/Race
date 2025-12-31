@@ -324,7 +324,8 @@ export async function recordBet(
 
   if (existing) return true;
 
-  await supabase.from('bets').insert({
+  // Insert bet (totalPool calculated from bets in horses API)
+  const { error } = await supabase.from('bets').insert({
     race_id: raceId,
     horse_id: horseId,
     bettor_wallet: bettorWallet,
@@ -333,11 +334,10 @@ export async function recordBet(
     status: 'confirmed',
   });
 
-  // Increment pool (you need this SQL function in Supabase)
-  await supabase.rpc('increment_race_pool', {
-    race_id_input: raceId,
-    amount_input: amount,
-  });
+  if (error) {
+    console.error('Failed to insert bet:', error);
+    return false;
+  }
 
   return true;
 }
