@@ -1,4 +1,3 @@
-// components/BetMarquee.tsx
 'use client';
 
 import { useEffect, useRef, useCallback } from 'react';
@@ -22,7 +21,7 @@ export function BetMarquee({ bets, horses }: BetMarqueeProps) {
   const offsetRef = useRef(0);
   const isPausedRef = useRef(false);
   const contentWidthRef = useRef(0);
-  const animationRef = useRef<number | null>(null); // ✅ FIX
+  const animationRef = useRef<number | null>(null);
 
   const formatWallet = (wallet: string) =>
     `${wallet.slice(0, 4)}...${wallet.slice(-4)}`;
@@ -45,10 +44,9 @@ export function BetMarquee({ bets, horses }: BetMarqueeProps) {
 
     const measureContent = () => {
       const cards = track.querySelectorAll('.bet-card');
-      const numCards = cards.length / 2;
+      const numCards = cards.length / 4; // Adjusted for 4x repeat
       if (numCards > 0 && cards[0]) {
-        const cardWidth =
-          (cards[0] as HTMLElement).offsetWidth + 12;
+        const cardWidth = (cards[0] as HTMLElement).offsetWidth + 12; // card + gap
         contentWidthRef.current = cardWidth * numCards;
       }
     };
@@ -83,17 +81,6 @@ export function BetMarquee({ bets, horses }: BetMarqueeProps) {
     };
   }, [bets.length]);
 
-  if (bets.length === 0) {
-    return (
-      <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm h-full flex items-center justify-center min-h-[88px]">
-        <div className="text-center">
-          <p className="text-gray-400 text-sm">No bets yet</p>
-          <p className="text-gray-300 text-xs mt-1">Be the first to bet!</p>
-        </div>
-      </div>
-    );
-  }
-
   const BetCard = ({ bet }: { bet: Bet }) => {
     const horse = getHorse(bet.horse_id);
     if (!horse) return null;
@@ -120,13 +107,9 @@ export function BetMarquee({ bets, horses }: BetMarqueeProps) {
             </span>
           </div>
           <div className="flex items-center gap-2 text-xs text-gray-400">
-            <span className="font-mono">
-              {formatWallet(bet.bettor_wallet)}
-            </span>
+            <span className="font-mono">{formatWallet(bet.bettor_wallet)}</span>
             <span>•</span>
-            <span className="whitespace-nowrap">
-              {timeAgo(bet.created_at)}
-            </span>
+            <span className="whitespace-nowrap">{timeAgo(bet.created_at)}</span>
           </div>
         </div>
       </div>
@@ -134,45 +117,46 @@ export function BetMarquee({ bets, horses }: BetMarqueeProps) {
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden relative min-h-[88px]">
+    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden relative h-[116px]">
+      {/* Header Label - Always present to maintain layout */}
       <div className="absolute top-0 left-0 z-20 bg-white pt-3 pb-1 px-4">
         <p className="text-xs text-gray-500 font-medium flex items-center gap-2">
-          <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+          <span className={`w-2 h-2 rounded-full ${bets.length > 0 ? 'bg-green-500 animate-pulse' : 'bg-gray-300'}`} />
           Live Bets
         </p>
       </div>
 
-      <div className="absolute left-0 top-0 bottom-0 w-16 bg-gradient-to-r from-white to-transparent z-10 pointer-events-none" />
-      <div className="absolute right-0 top-0 bottom-0 w-16 bg-gradient-to-l from-white to-transparent z-10 pointer-events-none" />
-
-      <div
-        className="pt-10 pb-4 overflow-hidden"
-        onMouseEnter={() => {
-          isPausedRef.current = true;
-        }}
-        onMouseLeave={() => {
-          isPausedRef.current = false;
-        }}
-      >
-        <div
-          ref={trackRef}
-          className="flex gap-3 will-change-transform"
-          style={{ width: 'max-content' }}
-        >
-          {bets.map((bet, i) => (
-            <BetCard key={`a-${bet.id}-${i}`} bet={bet} />
-          ))}
-          {bets.map((bet, i) => (
-            <BetCard key={`b-${bet.id}-${i}`} bet={bet} />
-          ))}
-                    {bets.map((bet, i) => (
-            <BetCard key={`a-${bet.id}-${i}`} bet={bet} />
-          ))}
-          {bets.map((bet, i) => (
-            <BetCard key={`b-${bet.id}-${i}`} bet={bet} />
-          ))}
+      {bets.length === 0 ? (
+        /* Empty State - Shared container height */
+        <div className="flex flex-col items-center justify-center h-full pt-6">
+          <p className="text-gray-400 text-sm">No bets yet</p>
+          <p className="text-gray-300 text-xs mt-0.5">Be the first to bet!</p>
         </div>
-      </div>
+      ) : (
+        /* Marquee State */
+        <>
+          <div className="absolute left-0 top-0 bottom-0 w-16 bg-gradient-to-r from-white to-transparent z-10 pointer-events-none" />
+          <div className="absolute right-0 top-0 bottom-0 w-16 bg-gradient-to-l from-white to-transparent z-10 pointer-events-none" />
+
+          <div
+            className="pt-11 pb-4 overflow-hidden"
+            onMouseEnter={() => { isPausedRef.current = true; }}
+            onMouseLeave={() => { isPausedRef.current = false; }}
+          >
+            <div
+              ref={trackRef}
+              className="flex gap-3 will-change-transform"
+              style={{ width: 'max-content' }}
+            >
+              {[...Array(4)].map((_, groupIdx) => 
+                bets.map((bet, i) => (
+                  <BetCard key={`${groupIdx}-${bet.id}-${i}`} bet={bet} />
+                ))
+              )}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
