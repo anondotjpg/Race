@@ -88,6 +88,100 @@ export default function Home() {
     );
   }
 
+  const handleBet = async (horseId: number, amount: number) => {
+    const win = window as any;
+    const phantom = win.phantom?.solana || win.solana;
+  
+    if (!phantom?.isConnected || !phantom?.publicKey) {
+      setBetError('Please connect your wallet first');
+      setTimeout(() => setBetError(null), 3000);
+      return;
+    }
+  
+    if (!currentRace) {
+      setBetError('No active race');
+      setTimeout(() => setBetError(null), 3000);
+      return;
+    }
+  
+    const horse = horses.find(h => h.id === horseId);
+    if (!horse) {
+      setBetError('Horse not found');
+      setTimeout(() => setBetError(null), 3000);
+      return;
+    }
+  
+    setBetError(null);
+    setBetSuccess(null);
+  
+    try {
+      const {
+        PublicKey,
+        Transaction,
+        SystemProgram,
+        Connection,
+        LAMPORTS_PER_SOL,
+      } = await import('@solana/web3.js');
+  
+      const currentWallet = phantom.publicKey.toBase58();
+      const rpcUrl =
+        process.env.NEXT_PUBLIC_SOLANA_RPC ||
+        'https://api.mainnet-beta.solana.com';
+  
+      const connection = new Connection(rpcUrl, 'confirmed');
+      const fromPubkey = new PublicKey(currentWallet);
+      const toPubkey = new PublicKey(horse.wallet_address);
+      const lamports = Math.floor(amount * LAMPORTS_PER_SOL);
+  
+      const { blockhash } = await connection.getLatestBlockhash('confirmed');
+  
+      const transaction = new Transaction().add(
+        SystemProgram.transfer({ fromPubkey, toPubkey, lamports })
+      );
+  
+      transaction.recentBlockhash = blockhash;
+      transaction.feePayer = fromPubkey;
+  
+      const { signature } = await phantom.signAndSendTransaction(transaction);
+  
+      if (!signature) {
+        setBetError('Transaction cancelled');
+        setTimeout(() => setBetError(null), 3000);
+        return;
+      }
+  
+      const res = await fetch('/api/bet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          raceId: currentRace.id,
+          horseId,
+          txSignature: signature,
+          bettorWallet: currentWallet,
+        }),
+      });
+  
+      const data = await res.json();
+  
+      if (!res.ok) {
+        setBetError(data.error || 'Failed to record bet');
+        setTimeout(() => setBetError(null), 3000);
+        return;
+      }
+  
+      setBetSuccess(`${amount} SOL on ${horse.name}`);
+      setTimeout(() => setBetSuccess(null), 5000);
+    } catch (error: any) {
+      if (error?.message?.includes('User rejected')) {
+        setBetError('Transaction cancelled');
+      } else {
+        const msg = error?.message || 'Bet failed';
+        setBetError(msg.length > 50 ? msg.slice(0, 50) + '...' : msg);
+      }
+      setTimeout(() => setBetError(null), 5000);
+    }
+  };  
+
   return (
     <div className="min-h-screen bg-black font-mono uppercase tracking-tight text-[#1aff00]">
       {/* GLOBAL CRT SCANLINES */}
@@ -188,7 +282,7 @@ export default function Home() {
               <HorseCard
                 key={horse.id}
                 horse={horse}
-                onBet={async () => {}}
+                onBet={handleBet}
                 disabled={isRacing || timeRemaining === 0}
                 isWinner={lastResult?.winningHorseId === horse.id}
               />

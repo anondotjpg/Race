@@ -131,7 +131,7 @@ export function BetMarquee({ bets, horses }: BetMarqueeProps) {
       className="
         relative bg-black border-4 border-[#555]
         font-mono uppercase tracking-tight
-        overflow-hidden h-[116px]
+        overflow-hidden h-[126px]
       "
     >
       {/* CRT scanlines */}

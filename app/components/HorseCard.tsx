@@ -68,30 +68,31 @@ export function HorseCard({
 
       {/* WINNER BADGE */}
       {isWinner && (
-        <div className="absolute -top-4 -right-4 bg-yellow-500 text-black px-2 py-1 text-xs border-2 border-black shadow">
+        <div className="absolute -top-4 -right-4 bg-yellow-500 text-black px-2 py-1 text-xs border-2 border-black shadow z-10">
           WINNER
         </div>
       )}
 
       <div className="relative p-4 space-y-4">
-        {/* HEADER */}
+        {/* HEADER - Fixed spacing using invisible class */}
         <div className="flex justify-between items-start">
-          <div>
-            <div className="text-[#1aff00] text-lg leading-none">
+          <div className="pr-2">
+            <div className="text-[#1aff00] text-lg leading-tight break-all">
               {horse.name}
             </div>
           </div>
 
-          {hasValidOdds && (
-            <div className="text-right">
-              <div className="text-yellow-400 text-2xl leading-none">
-                {horse.odds}x
-              </div>
-              <div className="text-[10px] text-yellow-300 opacity-70">
-                ODDS
-              </div>
+          <div 
+            className={`text-right transition-opacity ${!hasValidOdds ? 'invisible' : 'visible'}`}
+            aria-hidden={!hasValidOdds}
+          >
+            <div className="text-yellow-400 text-2xl leading-none">
+              {horse.odds}x
             </div>
-          )}
+            <div className="text-[10px] text-yellow-300 opacity-70">
+              ODDS
+            </div>
+          </div>
         </div>
 
         {/* STATS */}
@@ -120,10 +121,10 @@ export function HorseCard({
             onClick={copyAddress}
             className="w-full border-2 border-[#333] bg-black p-2 flex justify-between items-center hover:bg-[#050505]"
           >
-            <code className="text-[10px] text-[#1aff00] truncate">
+            <code className="text-[10px] text-[#1aff00] truncate mr-2">
               {horse.wallet_address}
             </code>
-            <span className="text-[10px] text-yellow-400">
+            <span className="text-[10px] text-yellow-400 whitespace-nowrap">
               {copied ? 'COPIED' : 'COPY'}
             </span>
           </button>
@@ -138,7 +139,7 @@ export function HorseCard({
                 key={amt}
                 onClick={() => setAmount(amt.toString())}
                 className={`
-                  flex-1 py-2 text-xs border-2
+                  flex-1 py-2 text-xs border-2 transition-colors
                   ${active
                     ? 'bg-[#1aff00] text-black border-black'
                     : 'bg-black text-[#7CFF7C] border-[#333] hover:bg-[#050505]'}
@@ -172,7 +173,8 @@ export function HorseCard({
               px-4 border-2 border-yellow-400
               bg-yellow-500 text-black font-bold
               hover:bg-yellow-400 active:scale-95
-              disabled:opacity-50
+              disabled:opacity-50 disabled:active:scale-100
+              transition-all
             "
           >
             {betting ? '...' : 'BET'}
