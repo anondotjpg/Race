@@ -60,18 +60,12 @@ export function HorseCard({
   const [betting, setBetting] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  // Reset betting state safely if parent disables mid-flight
   useEffect(() => {
     if (disabled) setBetting(false);
   }, [disabled]);
 
-  // ─────────────────────────────────────────────
-  // BET HANDLER (GUARDED + SERIALIZED)
-  // ─────────────────────────────────────────────
-
   const handleBet = async () => {
     if (betting || disabled) return;
-
     const parsed = Number(amount);
     if (!Number.isFinite(parsed) || parsed <= 0) return;
 
@@ -83,45 +77,32 @@ export function HorseCard({
     }
   };
 
-  // ─────────────────────────────────────────────
-  // CLIPBOARD (SAFE)
-  // ─────────────────────────────────────────────
-
   const copyAddress = async () => {
     try {
       await navigator.clipboard.writeText(horse.wallet_address);
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
-    } catch {
-      // silently ignore (Safari private mode etc.)
-    }
+    } catch { /* ignore */ }
   };
 
-  // ─────────────────────────────────────────────
-  // INPUT SANITIZATION
-  // ─────────────────────────────────────────────
-
   const handleAmountChange = (v: string) => {
-    // Prevent scientific notation / negatives
     if (!/^\d*\.?\d{0,3}$/.test(v)) return;
     setAmount(v);
   };
+
+  // Check if odds are a valid number greater than 0
+  const hasValidOdds = horse.odds && Number(horse.odds) > 0;
 
   return (
     <div
       className={`
         relative overflow-visible rounded-2xl transition-all duration-300
-        ${
-          isWinner
-            ? `rounded-2xl shadow-lg ${colors.glow}`
-            : 'shadow-sm hover:shadow-md'
-        }
+        ${isWinner ? `rounded-2xl shadow-lg ${colors.glow}` : 'shadow-sm hover:shadow-md'}
         ${disabled ? 'opacity-60 pointer-events-none' : ''}
       `}
     >
       <div className="absolute inset-0 bg-white/80 rounded-2xl" />
 
-      {/* Winner badge */}
       {isWinner && (
         <div className="absolute -top-5 -right-5 z-10 flex items-center gap-1 px-2 py-1 rounded-full">
           <span className="text-3xl">👑</span>
@@ -132,62 +113,44 @@ export function HorseCard({
         {/* HEADER */}
         <div className="flex justify-between items-start mb-4">
           <div className="flex gap-3">
-            <div
-              className={`w-12 h-12 rounded-xl ${colors.accent} flex items-center justify-center shadow-lg ${colors.glow}`}
-            >
-              <span className="text-2xl">{horse.emoji}</span>
-            </div>
-
             <div>
-              <h3 className="font-semibold text-gray-900">
-                {horse.name}
-              </h3>
+              <h3 className="font-semibold text-gray-900">{horse.name}</h3>
             </div>
           </div>
 
-          <div className="text-right">
-            <div className={`text-2xl font-bold ${colors.text}`}>
-              {horse.odds || '—'}
-              <span className="text-sm font-normal text-gray-400">
-                x
-              </span>
+          {/* FIXED: Only shows if odds are > 0. Prevents "0" rendering in JSX */}
+          {hasValidOdds && (
+            <div className="text-right">
+              <div className={`text-2xl font-bold ${colors.text}`}>
+                {horse.odds}
+                <span className="text-sm font-normal text-gray-400 ml-0.5">x</span>
+              </div>
+              <p className="text-xs text-gray-400">odds</p>
             </div>
-            <p className="text-xs text-gray-400">odds</p>
-          </div>
+          )}
         </div>
 
         {/* STATS */}
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div className="bg-gray-50 rounded-xl p-3">
-            <p className="text-xs text-gray-500 mb-1">
-              Total Bets
-            </p>
+            <p className="text-xs text-gray-500 mb-1">Total</p>
             <p className="font-semibold text-gray-900">
-              {horse.totalBets?.toFixed(3) ?? '0.000'}{' '}
-              <span className="text-gray-400 font-normal">
-                SOL
-              </span>
+              {horse.totalBets?.toFixed(3) ?? '0.000'}
             </p>
           </div>
 
           <div className="bg-gray-50 rounded-xl p-3">
-            <p className="text-xs text-gray-500 mb-1">
-              Pool Share
-            </p>
+            <p className="text-xs text-gray-500 mb-1">Pool</p>
             <p className="font-semibold text-gray-900">
               {(horse as any).percentage ?? '0'}
-              <span className="text-gray-400 font-normal">
-                %
-              </span>
+              <span className="text-gray-400 font-normal">%</span>
             </p>
           </div>
         </div>
 
         {/* WALLET */}
         <div className="mb-4">
-          <p className="text-xs text-gray-500 mb-2">
-            Deposit Address
-          </p>
+          <p className="text-xs text-gray-500 mb-2">Deposit Address</p>
           <button
             onClick={copyAddress}
             type="button"
@@ -196,13 +159,7 @@ export function HorseCard({
             <code className="text-xs text-gray-600 font-mono truncate">
               {horse.wallet_address}
             </code>
-            <span
-              className={`text-xs font-medium ${
-                copied
-                  ? 'text-green-600'
-                  : 'text-gray-400 group-hover:text-gray-600'
-              }`}
-            >
+            <span className={`text-xs font-medium ${copied ? 'text-green-600' : 'text-gray-400 group-hover:text-gray-600'}`}>
               {copied ? '✓ Copied' : 'Copy'}
             </span>
           </button>
@@ -219,11 +176,7 @@ export function HorseCard({
                 onClick={() => setAmount(amt.toString())}
                 className={`
                   flex-1 py-2 rounded-lg text-xs font-medium transition-all
-                  ${
-                    active
-                      ? `${colors.accent} text-white shadow-sm`
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }
+                  ${active ? `${colors.accent} text-white shadow-sm` : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}
                 `}
               >
                 {amt}
@@ -243,9 +196,7 @@ export function HorseCard({
               placeholder="0.00"
               className="w-full px-4 py-3 pr-14 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-gray-900 transition"
             />
-            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-medium">
-              SOL
-            </span>
+            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-medium">SOL</span>
           </div>
 
           <button
@@ -260,24 +211,9 @@ export function HorseCard({
             `}
           >
             {betting ? (
-              <svg
-                className="w-4 h-4 animate-spin"
-                fill="none"
-                viewBox="0 0 24 24"
-              >
-                <circle
-                  className="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                />
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                />
+              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
               </svg>
             ) : (
               'Bet'
