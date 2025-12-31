@@ -8,6 +8,10 @@ import { PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+// Simple in-memory rate limit (resets on cold start)
+let lastExecutionTime = 0;
+const MIN_EXECUTION_GAP_MS = 5000; // 5 seconds between executions
+
 // Monitor horse wallets for direct deposits
 async function checkDirectDeposits(supabase: any, raceId: string, bettingEndsAt: string) {
   let recorded = 0;
@@ -27,7 +31,6 @@ async function checkDirectDeposits(supabase: any, raceId: string, bettingEndsAt:
         );
 
         for (const sigInfo of signatures) {
-          // Check if already recorded
           const { data: existing } = await supabase
             .from('bets')
             .select('id')
@@ -59,13 +62,11 @@ async function checkDirectDeposits(supabase: any, raceId: string, bettingEndsAt:
           const sender = accountKeys?.[0]?.toBase58() || '';
           if (!sender) continue;
 
-          // Check if within betting period
           const txTime = sigInfo.blockTime ? sigInfo.blockTime * 1000 : Date.now();
           const bettingEnds = new Date(bettingEndsAt).getTime();
           
           if (txTime > bettingEnds) continue;
 
-          // Record bet
           const { error } = await supabase.from('bets').insert({
             race_id: raceId,
             horse_id: horse.id,
@@ -77,7 +78,7 @@ async function checkDirectDeposits(supabase: any, raceId: string, bettingEndsAt:
 
           if (!error) {
             recorded++;
-            console.log(`[CRON] Direct deposit: ${amount} SOL on ${horse.name} from ${sender.slice(0, 10)}...`);
+            console.log(`[CRON] Deposit: ${amount} SOL on ${horse.name}`);
           }
         }
       } catch (err) {
@@ -93,96 +94,81 @@ async function checkDirectDeposits(supabase: any, raceId: string, bettingEndsAt:
 
 export async function GET(request: NextRequest) {
   const startTime = Date.now();
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.log('🕒 [CRON] Started at:', new Date().toISOString());
-
-  // Auth check
+  
+  // Check if this is from Vercel cron (has auth) or client trigger (no auth)
   const authHeader = request.headers.get('authorization');
   const cronSecret = process.env.CRON_SECRET;
+  const isVercelCron = cronSecret && authHeader === `Bearer ${cronSecret}`;
   
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    console.log('[CRON] ❌ Unauthorized');
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  // Rate limit client triggers (not Vercel cron)
+  if (!isVercelCron) {
+    const timeSinceLastExec = Date.now() - lastExecutionTime;
+    if (timeSinceLastExec < MIN_EXECUTION_GAP_MS) {
+      return NextResponse.json({ 
+        ok: true, 
+        skipped: true, 
+        reason: 'rate-limited',
+        retryIn: MIN_EXECUTION_GAP_MS - timeSinceLastExec
+      });
+    }
   }
+  
+  lastExecutionTime = Date.now();
+  console.log(`🕒 [CRON] ${isVercelCron ? 'Vercel' : 'Client'} trigger @ ${new Date().toISOString()}`);
 
   const supabase = createServerSupabaseClient();
   const nowIso = new Date().toISOString();
 
   let executed = 0;
   let startedRaceId: string | null = null;
-  let directDeposits = 0;
+  let deposits = 0;
 
   try {
-    // 1. Check for expired betting races
-    console.log('[CRON] Step 1: Checking for expired betting races...');
-    const { data: expiredRaces, error: expiredError } = await supabase
+    // 1. Execute expired races
+    const { data: expiredRaces } = await supabase
       .from('races')
-      .select('id, status, betting_ends_at')
+      .select('id, betting_ends_at')
       .eq('status', 'betting')
       .lt('betting_ends_at', nowIso);
 
-    if (expiredError) {
-      console.error('[CRON] ❌ Query error:', expiredError);
-    }
-
-    console.log('[CRON] Expired races found:', expiredRaces?.length ?? 0);
-
-    // Execute expired races (check deposits FIRST!)
     for (const race of expiredRaces ?? []) {
-      // Check for any last-minute direct deposits BEFORE executing
-      console.log(`[CRON] Checking direct deposits for race: ${race.id}`);
-      const depositsFound = await checkDirectDeposits(supabase, race.id, race.betting_ends_at);
-      console.log(`[CRON] Direct deposits recorded: ${depositsFound}`);
+      const d = await checkDirectDeposits(supabase, race.id, race.betting_ends_at);
+      deposits += d;
       
-      console.log(`[CRON] Executing race: ${race.id}`);
       const result = await executeRace(race.id);
       if (result) {
-        console.log(`[CRON] ✓ Race finished - Winner: ${result.winningHorseName}`);
+        console.log(`[CRON] ✓ Winner: ${result.winningHorseName}`);
         executed++;
-        directDeposits += depositsFound;
       }
     }
 
-    // 2. Check for active betting race (and monitor for deposits)
-    console.log('[CRON] Step 2: Checking for active betting race...');
+    // 2. Ensure active race exists
     const { data: activeRace } = await supabase
       .from('races')
-      .select('id, status, betting_ends_at')
+      .select('id, betting_ends_at')
       .eq('status', 'betting')
       .maybeSingle();
 
-    console.log('[CRON] Active race:', activeRace?.id ?? 'NONE');
-
-    // Also check active race for deposits (so UI updates in real-time)
-    if (activeRace) {
-      const activeDeposits = await checkDirectDeposits(supabase, activeRace.id, activeRace.betting_ends_at);
-      directDeposits += activeDeposits;
-      if (activeDeposits > 0) {
-        console.log(`[CRON] Active race deposits: ${activeDeposits}`);
-      }
-    }
-
-    // 3. Start new race if none active
     if (!activeRace) {
-      console.log('[CRON] Step 3: Starting new race...');
       startedRaceId = await startNewRace();
-      console.log('[CRON] New race:', startedRaceId ?? 'FAILED');
+      if (startedRaceId) console.log(`[CRON] ✓ New race: ${startedRaceId.slice(0, 8)}`);
+    } else {
+      const d = await checkDirectDeposits(supabase, activeRace.id, activeRace.betting_ends_at);
+      deposits += d;
     }
 
     const duration = Date.now() - startTime;
-    console.log(`[CRON] ✓ Completed in ${duration}ms`);
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log(`[CRON] ✓ ${executed} executed, ${deposits} deposits, ${duration}ms`);
 
     return NextResponse.json({
       ok: true,
       executed,
       startedRaceId,
-      directDeposits,
-      timestamp: nowIso,
+      deposits,
       duration: `${duration}ms`,
     });
   } catch (error) {
-    console.error('[CRON] ❌ Fatal error:', error);
-    return NextResponse.json({ error: 'Internal error', details: String(error) }, { status: 500 });
+    console.error('[CRON] Error:', error);
+    return NextResponse.json({ error: 'Internal error' }, { status: 500 });
   }
 }

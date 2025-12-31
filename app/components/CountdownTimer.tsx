@@ -11,16 +11,31 @@ export function CountdownTimer({ seconds, totalPool }: CountdownTimerProps) {
   const safeSeconds = Math.max(0, Math.floor(seconds));
   const [displaySeconds, setDisplaySeconds] = useState(safeSeconds);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const triggeredRef = useRef(false);
 
   // Sync from server
   useEffect(() => {
     setDisplaySeconds(safeSeconds);
+    // Reset trigger when new race starts (seconds go back up)
+    if (safeSeconds > 10) {
+      triggeredRef.current = false;
+    }
   }, [safeSeconds]);
 
   // Local ticking
   useEffect(() => {
     intervalRef.current = setInterval(() => {
-      setDisplaySeconds(prev => (prev > 0 ? prev - 1 : 0));
+      setDisplaySeconds(prev => {
+        const next = prev > 0 ? prev - 1 : 0;
+        
+        // Trigger cron when hitting 0 (only once per race)
+        if (next === 0 && prev > 0 && !triggeredRef.current) {
+          triggeredRef.current = true;
+          fetch('/api/cron', { cache: 'no-store' }).catch(() => {});
+        }
+        
+        return next;
+      });
     }, 1000);
 
     return () => {
