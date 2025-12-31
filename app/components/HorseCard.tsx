@@ -98,9 +98,14 @@ export function HorseCard({
           {/* HEADER */}
           <div className="flex justify-between items-start">
             <div className="pr-2">
-              <div className="text-[#1aff00] text-base leading-tight break-all">
-                {horse.name}
-              </div>
+                <div
+                className="
+                    text-[#1aff00] text-3xl leading-tight break-all
+                    [font-family:var(--font-vt323),var(--font-mono),monospace]
+                "
+                >
+                    {horse.name}
+                </div>
             </div>
 
             <div

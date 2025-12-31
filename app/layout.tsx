@@ -1,13 +1,20 @@
 // app/layout.tsx
 import type { Metadata } from "next";
-import { Geist_Mono } from "next/font/google";
+import { Geist_Mono, VT323 } from "next/font/google";
 import "./globals.css";
 import { WalletProvider } from "./context/WalletContext";
 
-// We intentionally go MONO-FIRST for terminal authenticity
+// MONO-FIRST TERMINAL STACK
 const geistMono = Geist_Mono({
   variable: "--font-mono",
   subsets: ["latin"],
+  display: "swap",
+});
+
+const vt323 = VT323({
+  variable: "--font-vt323",
+  subsets: ["latin"],
+  weight: "400",
   display: "swap",
 });
 
@@ -39,6 +46,7 @@ export default function RootLayout({
       <body
         className={`
           ${geistMono.variable}
+          ${vt323.variable}
           bg-black text-[#1aff00]
           font-mono uppercase tracking-tight
           antialiased
@@ -63,9 +71,7 @@ export default function RootLayout({
           "
         />
 
-        <WalletProvider>
-          {children}
-        </WalletProvider>
+        <WalletProvider>{children}</WalletProvider>
       </body>
     </html>
   );
