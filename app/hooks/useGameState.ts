@@ -1,7 +1,7 @@
 // hooks/useGameState.ts
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Race, Horse, Bet, HorseWithOdds, RaceResult } from '../types';
 
@@ -31,6 +31,13 @@ export function useGameState() {
     loading: true,
     error: null
   });
+  
+  const currentRaceRef = useRef<Race | null>(null);
+  
+  // Keep ref in sync
+  useEffect(() => {
+    currentRaceRef.current = state.currentRace;
+  }, [state.currentRace]);
 
   // Fetch current race
   const fetchRace = useCallback(async () => {
@@ -103,9 +110,11 @@ export function useGameState() {
   const triggerRace = async () => {
     if (!state.currentRace) return;
     
-    setState(prev => ({ ...prev, isRacing: true }));
+    // First, set racing state to start the animation
+    setState(prev => ({ ...prev, isRacing: true, lastResult: null, racePositions: [] }));
     
     try {
+      // Fetch the result from the server (determines winner)
       const res = await fetch('/api/race', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -118,21 +127,31 @@ export function useGameState() {
       const data = await res.json();
       
       if (data.result) {
+        // Store positions immediately so animation can converge to them
         setState(prev => ({
           ...prev,
-          lastResult: data.result,
           racePositions: data.result.positions
         }));
+        
+        // Wait for the 10-second race animation to complete
+        setTimeout(() => {
+          setState(prev => ({
+            ...prev,
+            isRacing: false,
+            lastResult: data.result
+          }));
+        }, 10000);
       }
     } catch (error) {
       console.error('Failed to execute race:', error);
+      setState(prev => ({ ...prev, isRacing: false }));
     }
   };
 
   // Subscribe to real-time updates
   useEffect(() => {
     const channel = supabase
-      .channel('race-updates')
+      .channel('game-updates')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'races' },
@@ -151,7 +170,7 @@ export function useGameState() {
                 fetchRace().then(race => {
                   if (race) fetchHorses(race.id);
                 });
-              }, 30000); // Wait for new race to start
+              }, 30000);
             }
           }
         }
@@ -159,19 +178,22 @@ export function useGameState() {
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'bets' },
-        (payload) => {
+        () => {
           // Refresh odds when new bet comes in
-          if (state.currentRace) {
-            fetchHorses(state.currentRace.id);
+          const race = currentRaceRef.current;
+          if (race) {
+            fetchHorses(race.id);
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('Realtime subscription status:', status);
+      });
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [state.currentRace?.id, fetchHorses, fetchRace]);
+  }, [fetchHorses, fetchRace]);
 
   // Initial load
   useEffect(() => {
@@ -184,16 +206,16 @@ export function useGameState() {
     });
   }, [fetchRace, fetchHorses]);
 
-  // Refresh odds periodically
+  // Poll for odds updates every 3 seconds (reliable fallback)
   useEffect(() => {
     if (!state.currentRace || state.isRacing) return;
     
     const interval = setInterval(() => {
       fetchHorses(state.currentRace!.id);
-    }, 5000);
+    }, 3000);
     
     return () => clearInterval(interval);
-  }, [state.currentRace, state.isRacing, fetchHorses]);
+  }, [state.currentRace?.id, state.isRacing, fetchHorses]);
 
   return {
     ...state,

@@ -11,109 +11,120 @@ interface RaceTrackProps {
   finalPositions?: number[];
 }
 
+const RACE_DURATION = 10000; // 10 seconds
+
 export function RaceTrack({ horses, isRacing, winningHorseId, finalPositions }: RaceTrackProps) {
   const [progress, setProgress] = useState<Record<number, number>>({});
-  const [bobOffset, setBobOffset] = useState<Record<number, number>>({});
+  const [racePhase, setRacePhase] = useState<'idle' | 'racing' | 'finished'>('idle');
   const animationRef = useRef<number | null>(null);
   const startTimeRef = useRef<number | null>(null);
-  
-  const RACE_DURATION = 10000;
+  const hasStartedRef = useRef(false);
 
+  // Initialize horse positions
   useEffect(() => {
     const initial: Record<number, number> = {};
-    const initialBob: Record<number, number> = {};
-    horses.forEach(h => { 
-      initial[h.id] = 0;
-      initialBob[h.id] = 0;
-    });
+    horses.forEach(h => { initial[h.id] = 0; });
     setProgress(initial);
-    setBobOffset(initialBob);
   }, [horses]);
 
+  // Handle race start/stop
   useEffect(() => {
-    if (!isRacing) {
+    // Race just started
+    if (isRacing && !hasStartedRef.current) {
+      hasStartedRef.current = true;
+      startTimeRef.current = performance.now();
+      setRacePhase('racing');
+      
+      // Reset positions
+      const initial: Record<number, number> = {};
+      horses.forEach(h => { initial[h.id] = 0; });
+      setProgress(initial);
+      
+      // Start animation loop
+      const animate = (currentTime: number) => {
+        if (!startTimeRef.current) return;
+        
+        const elapsed = currentTime - startTimeRef.current;
+        const raceProgress = Math.min(elapsed / RACE_DURATION, 1);
+        
+        const newProgress: Record<number, number> = {};
+        
+        horses.forEach((horse, index) => {
+          // Base progress with easing
+          let horseProgress = easeOutQuart(raceProgress);
+          
+          // Add unique variation per horse
+          const seed = horse.id * 1000;
+          const wobble = Math.sin(elapsed * 0.005 + seed) * 0.02;
+          const micro = Math.sin(elapsed * 0.012 + seed * 2) * 0.01;
+          
+          horseProgress += wobble + micro;
+          
+          // In final 25%, converge to final positions
+          if (finalPositions && finalPositions.length > 0 && raceProgress > 0.75) {
+            const posIndex = finalPositions.indexOf(horse.id);
+            const targetProgress = posIndex >= 0 
+              ? 0.98 - (posIndex * 0.012) 
+              : 0.85;
+            const blend = easeInOutCubic((raceProgress - 0.75) / 0.25);
+            horseProgress = horseProgress * (1 - blend) + targetProgress * blend;
+          }
+          
+          // Clamp
+          horseProgress = Math.max(0, Math.min(0.98, horseProgress));
+          newProgress[horse.id] = horseProgress * 100;
+        });
+        
+        setProgress(newProgress);
+        
+        if (raceProgress < 1) {
+          animationRef.current = requestAnimationFrame(animate);
+        } else {
+          setRacePhase('finished');
+        }
+      };
+      
+      animationRef.current = requestAnimationFrame(animate);
+    }
+    
+    // Race ended
+    if (!isRacing && hasStartedRef.current) {
+      hasStartedRef.current = false;
+      setRacePhase('finished');
+      
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
+        animationRef.current = null;
       }
-      // Reset to start if not racing and no winner
-      if (!winningHorseId) {
-        const initial: Record<number, number> = {};
-        horses.forEach(h => { initial[h.id] = 0; });
-        setProgress(initial);
-      }
-      return;
     }
-
-    startTimeRef.current = performance.now();
-    
-    const animate = (currentTime: number) => {
-      if (!startTimeRef.current) return;
-      
-      const elapsed = currentTime - startTimeRef.current;
-      const raceProgress = Math.min(elapsed / RACE_DURATION, 1);
-      
-      const newProgress: Record<number, number> = {};
-      const newBob: Record<number, number> = {};
-      
-      horses.forEach((horse, index) => {
-        // Smooth easing with individual variation
-        const baseEase = easeOutQuart(raceProgress);
-        
-        // Each horse has unique "personality" in their run
-        const seed = horse.id * 1000;
-        const variation = Math.sin(elapsed * 0.004 + seed) * 0.03;
-        const microVariation = Math.sin(elapsed * 0.01 + seed * 2) * 0.01;
-        
-        let horseProgress = baseEase + variation + microVariation;
-        
-        // Clamp progress
-        horseProgress = Math.max(0, Math.min(0.98, horseProgress));
-        
-        // Final stretch - converge to final positions
-        if (finalPositions && raceProgress > 0.75) {
-          const targetPosition = finalPositions.indexOf(horse.id);
-          const targetProgress = 0.98 - (targetPosition * 0.015);
-          const convergence = easeInOutCubic((raceProgress - 0.75) / 0.25);
-          horseProgress = horseProgress * (1 - convergence) + targetProgress * convergence;
-        }
-        
-        // Winner surge at the end
-        if (winningHorseId && horse.id === winningHorseId && raceProgress > 0.85) {
-          horseProgress = Math.max(horseProgress, 0.98);
-        }
-        
-        newProgress[horse.id] = horseProgress * 100;
-        
-        // Galloping bob animation
-        const gallop = Math.sin(elapsed * 0.025 + index) * 3;
-        newBob[horse.id] = isRacing ? gallop : 0;
-      });
-      
-      setProgress(newProgress);
-      setBobOffset(newBob);
-      
-      if (raceProgress < 1) {
-        animationRef.current = requestAnimationFrame(animate);
-      }
-    };
-    
-    animationRef.current = requestAnimationFrame(animate);
     
     return () => {
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
       }
     };
-  }, [isRacing, horses, winningHorseId, finalPositions]);
+  }, [isRacing, horses, finalPositions]);
 
-  // Sort horses by progress for display order during race
-  const sortedHorses = [...horses].sort((a, b) => 
+  // Reset when no winner (new race)
+  useEffect(() => {
+    if (!winningHorseId && !isRacing) {
+      setRacePhase('idle');
+      const initial: Record<number, number> = {};
+      horses.forEach(h => { initial[h.id] = 0; });
+      setProgress(initial);
+    }
+  }, [winningHorseId, isRacing, horses]);
+
+  // Sort horses by current progress
+  const sortedByProgress = [...horses].sort((a, b) => 
     (progress[b.id] || 0) - (progress[a.id] || 0)
   );
 
+  const showWinner = winningHorseId && racePhase === 'finished' && !isRacing;
+
   return (
     <div className="relative bg-gradient-to-b from-emerald-900 via-emerald-800 to-emerald-900 rounded-3xl overflow-hidden shadow-2xl">
-      {/* Sky gradient */}
+      {/* Sky */}
       <div className="absolute inset-0 bg-gradient-to-b from-sky-400/20 via-transparent to-transparent" />
       
       {/* Header */}
@@ -123,11 +134,12 @@ export function RaceTrack({ horses, isRacing, winningHorseId, finalPositions }: 
           <div>
             <h3 className="text-white font-semibold">Derby Track</h3>
             <p className="text-emerald-300/60 text-xs">
-              {isRacing ? 'Race in progress...' : winningHorseId ? 'Race complete' : 'Awaiting start'}
+              {racePhase === 'racing' ? 'Race in progress...' : 
+               racePhase === 'finished' ? 'Race complete' : 'Awaiting start'}
             </p>
           </div>
         </div>
-        {isRacing && (
+        {racePhase === 'racing' && (
           <div className="flex items-center gap-2 px-3 py-1.5 bg-red-500/20 rounded-full">
             <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
             <span className="text-red-400 text-xs font-medium uppercase tracking-wider">Live</span>
@@ -137,14 +149,11 @@ export function RaceTrack({ horses, isRacing, winningHorseId, finalPositions }: 
       
       {/* Track */}
       <div className="relative p-4">
-        {/* Track surface with lanes */}
         <div className="relative bg-gradient-to-b from-amber-800/40 to-amber-900/40 rounded-2xl overflow-hidden">
           {/* Track texture */}
-          <div className="absolute inset-0 opacity-20">
-            <div className="absolute inset-0" style={{
-              backgroundImage: `repeating-linear-gradient(90deg, transparent, transparent 2px, rgba(255,255,255,0.03) 2px, rgba(255,255,255,0.03) 4px)`
-            }} />
-          </div>
+          <div className="absolute inset-0 opacity-20" style={{
+            backgroundImage: `repeating-linear-gradient(90deg, transparent, transparent 2px, rgba(255,255,255,0.03) 2px, rgba(255,255,255,0.03) 4px)`
+          }} />
           
           {/* Distance markers */}
           <div className="absolute inset-0 flex">
@@ -163,26 +172,23 @@ export function RaceTrack({ horses, isRacing, winningHorseId, finalPositions }: 
               <div key={i} className={`flex-1 ${i % 2 === 0 ? 'bg-white' : 'bg-black'}`} />
             ))}
           </div>
-          <div className="absolute right-8 top-0 bottom-0 w-px bg-white/30" />
           
           {/* Lanes */}
           <div className="relative py-3 space-y-1">
             {horses.map((horse, index) => {
               const horseProgress = progress[horse.id] || 0;
-              const bob = bobOffset[horse.id] || 0;
               const isWinner = winningHorseId === horse.id;
-              const position = sortedHorses.findIndex(h => h.id === horse.id) + 1;
+              const position = sortedByProgress.findIndex(h => h.id === horse.id) + 1;
+              
+              // Galloping animation
+              const bobAmount = racePhase === 'racing' ? Math.sin(Date.now() * 0.02 + index) * 3 : 0;
               
               return (
-                <div 
-                  key={horse.id} 
-                  className="relative h-14 group"
-                >
+                <div key={horse.id} className="relative h-14">
                   {/* Lane background */}
-                  <div className={`
-                    absolute inset-0 rounded-lg transition-all duration-300
-                    ${isWinner && !isRacing ? 'bg-yellow-500/20' : 'bg-white/5'}
-                  `} />
+                  <div className={`absolute inset-0 rounded-lg transition-colors duration-500 ${
+                    isWinner && showWinner ? 'bg-yellow-500/20' : 'bg-white/5'
+                  }`} />
                   
                   {/* Lane divider */}
                   <div className="absolute bottom-0 left-0 right-0 h-px bg-white/10" />
@@ -192,58 +198,46 @@ export function RaceTrack({ horses, isRacing, winningHorseId, finalPositions }: 
                     <span className="text-xs font-bold text-white/60">{index + 1}</span>
                   </div>
                   
-                  {/* Horse name (left side) */}
+                  {/* Horse name */}
                   <div className="absolute left-10 top-1/2 -translate-y-1/2">
                     <span className="text-xs font-medium text-white/40">{horse.name}</span>
                   </div>
                   
-                  {/* Position indicator */}
-                  {isRacing && (
+                  {/* Position indicator during race */}
+                  {racePhase === 'racing' && (
                     <div className="absolute right-10 top-1/2 -translate-y-1/2">
-                      <span className={`
-                        text-xs font-bold px-2 py-0.5 rounded-full
-                        ${position === 1 ? 'bg-yellow-500/30 text-yellow-300' : 
-                          position === 2 ? 'bg-gray-400/30 text-gray-300' :
-                          position === 3 ? 'bg-amber-600/30 text-amber-400' :
-                          'bg-white/10 text-white/40'}
-                      `}>
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                        position === 1 ? 'bg-yellow-500/30 text-yellow-300' : 
+                        position === 2 ? 'bg-gray-400/30 text-gray-300' :
+                        position === 3 ? 'bg-amber-600/30 text-amber-400' :
+                        'bg-white/10 text-white/40'
+                      }`}>
                         {position === 1 ? '1st' : position === 2 ? '2nd' : position === 3 ? '3rd' : `${position}th`}
                       </span>
                     </div>
                   )}
                   
-                  {/* Horse + Jockey */}
+                  {/* Horse */}
                   <div 
-                    className="absolute top-1/2 transition-all ease-out"
+                    className="absolute top-1/2"
                     style={{ 
                       left: `calc(${Math.min(horseProgress, 92)}% + 30px)`,
-                      transform: `translateY(calc(-50% + ${bob}px))`,
-                      transitionDuration: isRacing ? '50ms' : '300ms'
+                      transform: `translateY(calc(-50% + ${bobAmount}px))`,
+                      transition: racePhase === 'racing' ? 'none' : 'left 0.3s ease-out'
                     }}
                   >
                     {/* Shadow */}
-                    <div 
-                      className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-8 h-2 bg-black/30 rounded-full blur-sm"
-                      style={{ transform: `translateX(-50%) scaleY(${0.5 + Math.abs(bob) * 0.05})` }}
-                    />
+                    <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-8 h-2 bg-black/30 rounded-full blur-sm" />
                     
-                    {/* Horse emoji with effects */}
-                    <div className={`
-                      relative text-3xl transition-transform
-                      ${isRacing ? 'scale-x-[-1]' : 'scale-x-[-1]'}
-                      ${isWinner && !isRacing ? 'scale-110' : ''}
-                    `}>
+                    {/* Horse emoji */}
+                    <div className={`text-3xl scale-x-[-1] ${isWinner && showWinner ? 'scale-110' : ''}`}>
                       🏇
-                      
-                      {/* Dust particles when racing */}
-                      {isRacing && horseProgress > 5 && (
-                        <div className="absolute -right-4 top-1/2 -translate-y-1/2 flex gap-0.5 opacity-40">
-                          <span className="text-xs animate-ping" style={{ animationDuration: '0.5s' }}>💨</span>
-                        </div>
+                      {/* Dust when racing */}
+                      {racePhase === 'racing' && horseProgress > 5 && (
+                        <span className="absolute -right-3 top-1/2 -translate-y-1/2 text-xs opacity-40">💨</span>
                       )}
-                      
-                      {/* Winner crown */}
-                      {isWinner && !isRacing && (
+                      {/* Crown for winner */}
+                      {isWinner && showWinner && (
                         <span className="absolute -top-4 left-1/2 -translate-x-1/2 text-lg animate-bounce">👑</span>
                       )}
                     </div>
@@ -255,10 +249,10 @@ export function RaceTrack({ horses, isRacing, winningHorseId, finalPositions }: 
         </div>
       </div>
       
-      {/* Winner announcement overlay */}
-      {winningHorseId && !isRacing && (
-        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center animate-fadeIn">
-          <div className="text-center">
+      {/* Winner overlay */}
+      {showWinner && (
+        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-10">
+          <div className="text-center animate-fadeIn">
             <div className="text-6xl mb-4 animate-bounce">🏆</div>
             <p className="text-yellow-400 text-2xl font-bold mb-2">
               {horses.find(h => h.id === winningHorseId)?.name}
@@ -268,21 +262,13 @@ export function RaceTrack({ horses, isRacing, winningHorseId, finalPositions }: 
         </div>
       )}
       
-      {/* CSS for animations */}
       <style jsx>{`
-        @keyframes marquee {
-          0% { transform: translateX(0); }
-          100% { transform: translateX(-50%); }
-        }
-        .animate-marquee {
-          animation: marquee 20s linear infinite;
-        }
         @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
+          from { opacity: 0; transform: scale(0.9); }
+          to { opacity: 1; transform: scale(1); }
         }
         .animate-fadeIn {
-          animation: fadeIn 0.5s ease-out;
+          animation: fadeIn 0.5s ease-out forwards;
         }
       `}</style>
     </div>

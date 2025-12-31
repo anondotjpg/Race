@@ -1,7 +1,7 @@
 // components/WalletConnect.tsx
 'use client';
 
-import { useWallet } from '../hooks/useWallet';
+import { useWallet } from "../context/WalletContext";
 
 export function WalletConnect() {
   const { wallet, connected, connecting, hasProvider, connect, disconnect } = useWallet();

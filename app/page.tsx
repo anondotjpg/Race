@@ -22,11 +22,12 @@ export default function Home() {
   } = useGameState();
   
   const { wallet, connected, sendBet } = useWallet();
+  
   const [showResults, setShowResults] = useState(false);
   const [betError, setBetError] = useState<string | null>(null);
   const [betSuccess, setBetSuccess] = useState<string | null>(null);
 
-  const handleBet = useCallback(async (horseId: number, amount: number) => {
+  const handleBet = async (horseId: number, amount: number) => {
     if (!connected || !wallet) {
       setBetError('Please connect your wallet first');
       setTimeout(() => setBetError(null), 3000);
@@ -83,7 +84,7 @@ export default function Home() {
       setBetError(error.message || 'Bet failed');
       setTimeout(() => setBetError(null), 3000);
     }
-  }, [connected, wallet, currentRace, horses, sendBet]);
+  };
 
   useEffect(() => {
     if (lastResult && !isRacing) {
