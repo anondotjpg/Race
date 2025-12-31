@@ -1,7 +1,7 @@
 // app/api/cron/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase';
-import { executeRace, startNewRace } from '@/lib/race-engine';
+import { createServerSupabaseClient } from '@/app/lib/supabase';
+import { executeRace, startNewRace } from '@/app/lib/race-engine';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
