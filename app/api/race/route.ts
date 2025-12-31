@@ -4,11 +4,11 @@ import { createServerSupabaseClient } from '@/app/lib/supabase';
 
 export const runtime = 'nodejs';
 
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   const supabase = createServerSupabaseClient();
 
   try {
-    // Get current active race (betting or racing)
+    // Fetch current active race (betting or racing)
     const { data: race, error } = await supabase
       .from('races')
       .select('*')
@@ -19,11 +19,11 @@ export async function GET(request: NextRequest) {
 
     if (error) throw error;
 
-    // It is VALID to return null here
-    // Cron will start a new race shortly
+    // It's valid for race to be null
+    // Cron will start a new one if needed
     return NextResponse.json({ race });
-  } catch (error) {
-    console.error('[RACE GET]', error);
+  } catch (err) {
+    console.error('[api/race]', err);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
