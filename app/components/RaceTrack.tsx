@@ -7,7 +7,7 @@ interface RaceTrackProps {
   horses: HorseWithOdds[];
   isRacing: boolean;
   winningHorseId?: number;
-  finalPositions?: number[]; // Array of horse IDs in order of finish [winner, 2nd, 3rd...]
+  finalPositions?: number[];
   timeRemaining: number;
 }
 
@@ -29,22 +29,23 @@ export function RaceTrack({
   const RACE_DURATION = 8000; 
 
   const startRace = () => {
+    // 1. CLEAR previous positions for the new race start
+    setPositions(Object.fromEntries(horses.map(h => [h.id, 0])));
+    
     setInternalRacing(true);
     raceTokenRef.current += 1;
     const token = raceTokenRef.current;
     startTimeRef.current = null;
 
-    // IMPORTANT: Map horses to their specific ranks for the finish line
     horseStatsRef.current = Object.fromEntries(
       horses.map((h) => {
-        // Find where this horse finished (0 = Winner, 4 = Last)
         const rank = finalPositions?.indexOf(h.id) ?? 2; 
         return [
           h.id,
           {
-            base: 0.85 + Math.random() * 0.1, // Slight variance in overall speed
-            kick: (4 - rank) * 1.5, // Higher rank gets a bigger "boost" at the end
-            freq: 80 + Math.random() * 100, // Leg movement speed
+            base: 0.85 + Math.random() * 0.1,
+            kick: (4 - rank) * 1.5,
+            freq: 80 + Math.random() * 100,
           },
         ];
       })
@@ -52,12 +53,11 @@ export function RaceTrack({
 
     const animate = (time: number) => {
       if (token !== raceTokenRef.current) return;
-
       if (!startTimeRef.current) startTimeRef.current = time;
+      
       const elapsed = time - startTimeRef.current;
       const t = Math.min(elapsed / RACE_DURATION, 1);
 
-      // Pacing curve: Slow start, fast middle, dash at end
       let phase = t < 0.2 ? (t / 0.2) * 0.2 :
                   t < 0.7 ? 0.2 + ((t - 0.2) / 0.5) * 0.5 :
                   0.7 + ((t - 0.7) / 0.3) * 0.3;
@@ -67,19 +67,13 @@ export function RaceTrack({
         horses.forEach(h => {
           const s = horseStatsRef.current[h.id];
           const rank = finalPositions?.indexOf(h.id) ?? 4;
-          
-          // Calculate exact finish: Winner gets ~88%, others staggered behind
           const finishOffset = (4 - rank) * 3; 
-          const baseDistance = 75 + finishOffset; 
+          const baseDistance = 78 + finishOffset; 
           
-          // Add jitter for realism
-          const jitter = Math.sin(time / s.freq + h.id) * (t > 0.9 ? 0.2 : 0.8);
-
-          // Calculate current position
+          const jitter = Math.sin(time / s.freq + h.id) * (t > 0.9 ? 0.1 : 0.7);
           let pos = phase * baseDistance * s.base + jitter;
           
-          // AT THE END: Force the exact rank positions
-          if (t >= 1) pos = 78 + finishOffset;
+          if (t >= 1) pos = 80 + finishOffset; // LOCK POSITION
 
           next[h.id] = Math.max(0, pos);
         });
@@ -96,26 +90,22 @@ export function RaceTrack({
     requestRef.current = requestAnimationFrame(animate);
   };
 
+  // Triggered ONLY when isRacing becomes true (New Race Start)
   useEffect(() => {
-    if (isRacing && !internalRacing) startRace();
+    if (isRacing) {
+      startRace();
+    }
   }, [isRacing]);
 
-  useEffect(() => {
-    if (!isRacing && !internalRacing && timeRemaining > 0) {
-      setPositions(Object.fromEntries(horses.map(h => [h.id, 0])));
-    }
-  }, [timeRemaining, isRacing, internalRacing]);
-
   return (
-    <div className="relative bg-black p-2 border-4 border-[#555] font-mono">
+    <div className="relative bg-black p-2 border-4 border-[#555] font-mono shadow-[0_0_20px_rgba(0,0,0,0.4)]">
       <div className="bg-[#222] p-1 border-2 border-[#444]">
         <div className="relative bg-emerald-900 border-y-2 border-emerald-700 overflow-hidden h-64">
-          {/* Finish Line Checkers */}
           <div className="absolute right-12 inset-y-0 w-4 z-10" 
                style={{ backgroundImage: 'repeating-conic-gradient(#000 0 25%, #fff 0 50%)', backgroundSize: '8px 8px' }} />
 
           {horses.map((horse, index) => {
-            const isWinner = horse.id === winningHorseId && !internalRacing && !isRacing && positions[horse.id] > 0;
+            const isWinner = horse.id === winningHorseId && !internalRacing && !isRacing && (positions[horse.id] > 50);
             return (
               <div key={horse.id} className="relative h-12 border-b border-emerald-800/50 flex items-center">
                 <div className="w-8 bg-black/80 text-[10px] text-[#1aff00] flex items-center justify-center border-r border-emerald-700 h-full z-20">
@@ -127,14 +117,15 @@ export function RaceTrack({
                     style={{
                       left: `${positions[horse.id] ?? 0}%`,
                       transform: 'translateY(-50%)',
-                      transition: internalRacing ? 'none' : 'left 0.8s ease-out'
+                      // No transition during race; smooth slide ONLY if we manually reset
+                      transition: internalRacing ? 'none' : 'left 1s ease-in-out'
                     }}
                   >
                     <div className="flex flex-col items-center">
-                      <span className={`text-3xl transition-transform ${internalRacing ? 'animate-gallop' : ''} ${isWinner ? 'scale-125' : ''}`}>
+                      <span className={`text-3xl ${internalRacing ? 'animate-gallop' : ''} ${isWinner ? 'drop-shadow-[0_0_10px_#fff]' : ''}`}>
                         🏇
                       </span>
-                      <div className={`text-[9px] px-1 border mt-[-4px] whitespace-nowrap ${isWinner ? 'bg-[#1aff00] text-black border-white' : 'bg-black text-[#1aff00] border-[#1aff00]/30'}`}>
+                      <div className={`text-[9px] px-1 border mt-[-4px] whitespace-nowrap ${isWinner ? 'bg-[#1aff00] text-black border-white animate-pulse' : 'bg-black text-[#1aff00] border-[#1aff00]/30'}`}>
                         {horse.name} {isWinner ? '★ WINNER' : ''}
                       </div>
                     </div>

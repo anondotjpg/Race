@@ -13,15 +13,22 @@ import toast, { Toaster } from 'react-hot-toast';
 
 export default function Home() {
   const { 
-    currentRace, horses, timeRemaining, isRacing, 
-    lastResult, totalPool, racePositions, recentBets, loading 
+    currentRace, 
+    horses, 
+    timeRemaining, 
+    isRacing, 
+    lastResult, 
+    totalPool,
+    racePositions,
+    recentBets,
+    loading 
   } = useGameState();
   
   const { wallet } = useWallet();
   const [showResults, setShowResults] = useState(false);
   const [lastShownResultId, setLastShownResultId] = useState<string | null>(null);
 
-  // Retro UI Toast Styles
+  // --- Retro UI Toast Styles ---
   const toastStyle = {
     borderRadius: '0px',
     background: '#000',
@@ -42,8 +49,8 @@ export default function Home() {
 
   /**
    * TRIGGER RESULTS MODAL
-   * Waits 8.5 seconds (Animation = 8s + 0.5s pause).
-   * This ensures horses cross the finish line before the modal pops up.
+   * Set to 8500ms to match the 8-second RaceTrack animation duration
+   * plus a 500ms "Photo Finish" pause.
    */
   useEffect(() => {
     if (lastResult && !isRacing && lastResult.raceId !== lastShownResultId) {
@@ -56,17 +63,19 @@ export default function Home() {
   }, [lastResult, isRacing, lastShownResultId]);
 
   /**
-   * AUTO-HIDE MODAL & CLEANUP
-   * Closes the results window when the next betting round officially starts.
+   * CLEANUP
+   * We only force-close the results modal if a BRAND NEW race starts.
+   * This allows the user to look at the winner as long as they want 
+   * during the next betting phase.
    */
   useEffect(() => {
-    if (timeRemaining > 0 && showResults) {
+    if (isRacing && showResults) {
       setShowResults(false);
     }
-  }, [timeRemaining, showResults]);
+  }, [isRacing, showResults]);
 
   /**
-   * TRANSACTION HANDLER
+   * SOLANA TRANSACTION HANDLER
    */
   const handleBet = async (horseId: number, amount: number) => {
     const win = window as any;
@@ -120,12 +129,12 @@ export default function Home() {
       const msg = error?.message?.includes('User rejected') ? 'Cancelled' : 'Bet Failed';
       toast.error(msg, { style: errorStyle });
     }
-  };
+  };  
 
   if (loading) {
     return (
-      <div className="fixed inset-0 z-[100] bg-black flex items-center justify-center">
-        <img src="/load.gif" alt="Loading" className="w-[20vmin] pixelated" />
+      <div className="fixed inset-0 z-[100] bg-black flex items-center justify-center overflow-hidden">
+        <img src="/load.gif" alt="Loading" className="w-[30vmin] pixelated" />
       </div>
     );
   }
@@ -134,22 +143,33 @@ export default function Home() {
     <div className="min-h-screen bg-black font-mono uppercase tracking-tight text-[#1aff00]">
       <Toaster position="top-right" reverseOrder={false} />
 
-      {/* CRT Scanline Effect */}
+      {/* CRT Scanline Overlay */}
       <div className="fixed inset-0 pointer-events-none opacity-10 z-[5] bg-[linear-gradient(rgba(0,0,0,0)_50%,rgba(0,0,0,0.35)_50%)] bg-[length:100%_4px]" />
 
-      <header className="sticky top-0 z-40 bg-black border-b-4 border-[#555] px-4 py-3 flex justify-between items-center">
-        <div className="flex items-center gap-4">
-          <img src="/load.gif" alt="Logo" className="h-8 pixelated" />
-          <div className="text-xs sm:text-sm font-bold">
-            {currentRace ? `RACE #${currentRace.race_number}` : 'INITIALIZING...'}
+      <header className="sticky top-0 z-40 bg-black border-b-4 border-[#555]">
+        <div className="max-w-7xl mx-auto px-4 py-3 grid grid-cols-3 items-center">
+          <div className="flex items-center">
+            <img src="/load.gif" alt="Logo" className="h-10 w-auto pixelated" />
           </div>
-        </div>
-        
-        <div className="flex items-center gap-4">
-          <a href="https://twitter.com" target="_blank" rel="noreferrer" className="hover:scale-110 transition-transform">
-             <svg viewBox="0 0 24 24" className="h-5 w-5 fill-[#1aff00]"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"></path></svg>
-          </a>
-          <WalletConnect />
+          
+          <div className="text-center text-sm drop-shadow-[0_0_5px_rgba(26,255,0,0.2)] font-semibold">
+            {currentRace ? `RACE #${currentRace.race_number}` : 'NO ACTIVE RACE'}
+          </div>
+
+          <div className="flex justify-end items-center gap-6">
+            <a 
+              href="https://twitter.com" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="hover:scale-110 transition-transform"
+              aria-label="Follow on X"
+            >
+              <svg viewBox="0 0 24 24" className="h-5 w-5 fill-[#1aff00]">
+                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"></path>
+              </svg>
+            </a>
+            <WalletConnect />
+          </div>
         </div>
       </header>
 
@@ -157,24 +177,30 @@ export default function Home() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <CountdownTimer seconds={timeRemaining} totalPool={totalPool} />
           <div className="lg:col-span-2">
-            <BetMarquee horses={horses} bets={recentBets} />
+            <BetMarquee bets={recentBets} horses={horses} />
           </div>
         </div>
 
+        {/* RACE TRACK 
+            Note: finalPositions is passed here to ensure visual order 
+            matches the server result.
+        */}
         <RaceTrack
           horses={horses}
           isRacing={isRacing}
-          winningHorseId={lastResult?.winningHorseId} // For the "Winner" label highlight
-          finalPositions={racePositions} // CRITICAL: This dictates who physically crosses first
+          winningHorseId={lastResult?.winningHorseId}
+          finalPositions={racePositions} 
           timeRemaining={timeRemaining}
         />
 
-        <div className="space-y-4">
-          <div className="text-lg drop-shadow-[0_0_8px_rgba(26,255,0,0.4)]">
-            {isRacing ? "RACE IN PROGRESS..." : "SELECT YOUR CHAMPION"}
+        <div>
+          <div className="flex justify-between items-center mb-4">
+            <div className="text-lg text-[#1aff00] drop-shadow-[0_0_8px_rgba(26,255,0,0.4)]">
+              {isRacing ? "RACE IN PROGRESS" : "PLACE YOUR BETS"}
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             {horses.map(horse => (
               <HorseCard
                 key={horse.id}
@@ -186,13 +212,13 @@ export default function Home() {
             ))}
           </div>
         </div>
+
+        <footer className="text-center py-6 border-t-4 border-[#555] text-[10px] text-[#7CFF7C]">
+          BUILT ON SOLANA • STAKES ARE FINAL
+        </footer>
       </main>
 
-      <footer className="text-center py-8 border-t-4 border-[#555] text-[10px] opacity-60">
-        NETWORK: SOLANA MAINNET • PROVABLY FAIR RACES
-      </footer>
-
-      {/* WINNER MODAL */}
+      {/* RESULTS MODAL */}
       {showResults && lastResult && (
         <ResultsModal
           result={lastResult}
