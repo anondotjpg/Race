@@ -1,9 +1,8 @@
-// hooks/useGameState.ts
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { supabase } from '@/lib/supabase';
-import type { Race, HorseWithOdds, RaceResult } from '@/types';
+import { supabase } from '../lib/supabase';
+import type { Race, Bet, HorseWithOdds, RaceResult } from '../types';
 
 interface GameState {
   currentRace: Race | null;
