@@ -129,10 +129,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const currentWallet = phantom.publicKey.toBase58();
 
     try {
-      const connection = new Connection(
-        process.env.NEXT_PUBLIC_SOLANA_RPC || clusterApiUrl('mainnet-beta'),
-        'confirmed'
-      );
+      // Use Helius or fallback RPCs
+      const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC 
+        || 'https://api.mainnet-beta.solana.com';
+      
+      const connection = new Connection(rpcUrl, 'confirmed');
       
       const fromPubkey = new PublicKey(currentWallet);
       const toPubkey = new PublicKey(recipientAddress);
@@ -145,15 +146,29 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         })
       );
       
-      const { blockhash } = await connection.getLatestBlockhash();
+      // Get blockhash with retry
+      let blockhash;
+      try {
+        const result = await connection.getLatestBlockhash('confirmed');
+        blockhash = result.blockhash;
+      } catch (e) {
+        // Fallback: try without specifying commitment
+        const result = await connection.getLatestBlockhash();
+        blockhash = result.blockhash;
+      }
+      
       transaction.recentBlockhash = blockhash;
       transaction.feePayer = fromPubkey;
       
       const { signature } = await phantom.signAndSendTransaction(transaction);
       return signature;
-    } catch (e) {
+    } catch (e: any) {
       console.error('Transaction failed:', e);
-      return null;
+      // Return more specific error info
+      if (e.message?.includes('User rejected')) {
+        return null; // User cancelled
+      }
+      throw e; // Re-throw for other errors
     }
   };
 
