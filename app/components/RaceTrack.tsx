@@ -78,7 +78,7 @@ export function RaceTrack({
       <div className="p-4">
         <div className="relative bg-amber-900/30 rounded-xl overflow-hidden">
           {/* Finish line */}
-          <div className="absolute right-6 inset-y-0 w-3 flex flex-col">
+          <div className="absolute right-2 inset-y-0 w-3 flex flex-col">
             {Array.from({ length: 16 }).map((_, i) => (
               <div
                 key={i}
