@@ -144,6 +144,7 @@ export async function executeRace(raceId: string): Promise<RaceResult | null> {
       .update({
         status: 'finished',
         winning_horse_id: winningHorseId,
+        final_positions: positions,
         finished_at: new Date().toISOString()
       })
       .eq('id', raceId);

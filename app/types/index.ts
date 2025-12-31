@@ -16,6 +16,7 @@ export interface Race {
   race_number: number;
   status: 'betting' | 'racing' | 'finished';
   winning_horse_id: number | null;
+  final_positions: number[] | null;
   total_pool: number;
   started_at: string;
   betting_ends_at: string;
