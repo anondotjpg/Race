@@ -21,24 +21,36 @@ export default function Home() {
     loading 
   } = useGameState();
   
-  const { wallet, connected, sendBet } = useWallet();
+  const { wallet, connected } = useWallet();
   
   const [showResults, setShowResults] = useState(false);
   const [betError, setBetError] = useState<string | null>(null);
   const [betSuccess, setBetSuccess] = useState<string | null>(null);
 
   const handleBet = async (horseId: number, amount: number) => {
-    // Double-check connection by looking at Phantom directly
-    const phantom = (window as any).phantom?.solana || (window as any).solana;
-    const isReallyConnected = phantom?.isConnected && phantom?.publicKey;
+    console.log('handleBet called:', { horseId, amount });
     
-    if (!isReallyConnected) {
+    // Get Phantom directly from window
+    const win = window as any;
+    const phantom = win.phantom?.solana || win.solana;
+    
+    console.log('Phantom check:', { 
+      hasPhantom: !!phantom, 
+      isConnected: phantom?.isConnected, 
+      hasPublicKey: !!phantom?.publicKey 
+    });
+    
+    if (!phantom?.isConnected || !phantom?.publicKey) {
+      console.log('Not connected, showing error');
       setBetError('Please connect your wallet first');
       setTimeout(() => setBetError(null), 3000);
       return;
     }
+    
+    console.log('Wallet connected, checking race...');
 
     if (!currentRace) {
+      console.log('No current race');
       setBetError('No active race');
       setTimeout(() => setBetError(null), 3000);
       return;
@@ -46,19 +58,52 @@ export default function Home() {
 
     const horse = horses.find(h => h.id === horseId);
     if (!horse) {
+      console.log('Horse not found');
       setBetError('Horse not found');
       setTimeout(() => setBetError(null), 3000);
       return;
     }
 
+    console.log('Placing bet for horse:', horse.name, 'wallet:', horse.wallet_address);
+    
     setBetError(null);
     setBetSuccess(null);
 
     try {
-      const signature = await sendBet(horse.wallet_address, amount);
+      // Import required classes
+      const { PublicKey, Transaction, SystemProgram, Connection, LAMPORTS_PER_SOL } = await import('@solana/web3.js');
+      
+      const currentWallet = phantom.publicKey.toBase58();
+      const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC || 'https://api.mainnet-beta.solana.com';
+      
+      console.log('Creating transaction...', { from: currentWallet, to: horse.wallet_address, amount });
+      
+      const connection = new Connection(rpcUrl, 'confirmed');
+      const fromPubkey = new PublicKey(currentWallet);
+      const toPubkey = new PublicKey(horse.wallet_address);
+      const lamports = Math.floor(amount * LAMPORTS_PER_SOL);
+      
+      console.log('Getting blockhash...');
+      const { blockhash } = await connection.getLatestBlockhash('confirmed');
+      console.log('Got blockhash:', blockhash);
+      
+      const transaction = new Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey,
+          toPubkey,
+          lamports,
+        })
+      );
+      
+      transaction.recentBlockhash = blockhash;
+      transaction.feePayer = fromPubkey;
+      
+      console.log('Requesting Phantom signature...');
+      const { signature } = await phantom.signAndSendTransaction(transaction);
+      console.log('Transaction sent:', signature);
       
       if (!signature) {
-        setBetError('Transaction failed or cancelled');
+        setBetError('Transaction cancelled');
         setTimeout(() => setBetError(null), 3000);
         return;
       }
@@ -70,7 +115,7 @@ export default function Home() {
           raceId: currentRace.id,
           horseId,
           txSignature: signature,
-          bettorWallet: phantom.publicKey.toBase58()
+          bettorWallet: currentWallet
         })
       });
 
@@ -85,8 +130,14 @@ export default function Home() {
       setBetSuccess(`${amount} SOL on ${horse.name}`);
       setTimeout(() => setBetSuccess(null), 5000);
     } catch (error: any) {
-      setBetError(error.message || 'Bet failed');
-      setTimeout(() => setBetError(null), 3000);
+      console.error('Bet error:', error);
+      if (error?.message?.includes('User rejected')) {
+        setBetError('Transaction cancelled');
+      } else {
+        const msg = error?.message || 'Bet failed';
+        setBetError(msg.length > 50 ? msg.slice(0, 50) + '...' : msg);
+      }
+      setTimeout(() => setBetError(null), 5000);
     }
   };
 

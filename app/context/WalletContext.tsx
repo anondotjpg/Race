@@ -119,56 +119,65 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   };
 
   const sendBet = async (recipientAddress: string, amountSol: number): Promise<string | null> => {
-    const phantom = getPhantom();
+    // Get phantom fresh from window
+    const win = window as any;
+    const phantom = win.phantom?.solana || win.solana;
     
-    // Re-check wallet status
-    if (!phantom?.isConnected || !phantom?.publicKey) {
+    console.log('sendBet - phantom check:', { 
+      hasPhantom: !!phantom, 
+      isConnected: phantom?.isConnected, 
+      hasPublicKey: !!phantom?.publicKey,
+      recipientAddress,
+      amountSol 
+    });
+    
+    if (!phantom || !phantom.isConnected || !phantom.publicKey) {
+      console.log('sendBet - wallet not connected');
       return null;
     }
     
     const currentWallet = phantom.publicKey.toBase58();
+    console.log('sendBet - sending from:', currentWallet, 'to:', recipientAddress);
 
     try {
-      // Use Helius or fallback RPCs
       const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC 
         || 'https://api.mainnet-beta.solana.com';
+      
+      console.log('sendBet - using RPC:', rpcUrl);
       
       const connection = new Connection(rpcUrl, 'confirmed');
       
       const fromPubkey = new PublicKey(currentWallet);
       const toPubkey = new PublicKey(recipientAddress);
       
+      const lamports = Math.floor(amountSol * LAMPORTS_PER_SOL);
+      console.log('sendBet - lamports:', lamports);
+      
       const transaction = new Transaction().add(
         SystemProgram.transfer({
           fromPubkey,
           toPubkey,
-          lamports: Math.floor(amountSol * LAMPORTS_PER_SOL),
+          lamports,
         })
       );
       
-      // Get blockhash with retry
-      let blockhash;
-      try {
-        const result = await connection.getLatestBlockhash('confirmed');
-        blockhash = result.blockhash;
-      } catch (e) {
-        // Fallback: try without specifying commitment
-        const result = await connection.getLatestBlockhash();
-        blockhash = result.blockhash;
-      }
+      console.log('sendBet - getting blockhash...');
+      const { blockhash } = await connection.getLatestBlockhash('confirmed');
+      console.log('sendBet - got blockhash:', blockhash);
       
       transaction.recentBlockhash = blockhash;
       transaction.feePayer = fromPubkey;
       
+      console.log('sendBet - requesting signature from Phantom...');
       const { signature } = await phantom.signAndSendTransaction(transaction);
+      console.log('sendBet - transaction sent:', signature);
       return signature;
     } catch (e: any) {
-      console.error('Transaction failed:', e);
-      // Return more specific error info
+      console.error('sendBet - error:', e);
       if (e.message?.includes('User rejected')) {
-        return null; // User cancelled
+        return null;
       }
-      throw e; // Re-throw for other errors
+      throw e;
     }
   };
 
