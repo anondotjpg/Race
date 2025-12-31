@@ -114,7 +114,12 @@ export default function Home() {
   if (loading) {
     return (
       <div className="fixed inset-0 z-[100] bg-black flex items-center justify-center overflow-hidden">
-        <img src="/load.gif" alt="Loading" className="w-[30vmin] pixelated" />
+        {/* Subtle, soft glow for main loader */}
+        <img 
+          src="/load.gif" 
+          alt="Loading" 
+          className="w-[30vmin] pixelated drop-shadow-[0_0_12px_rgba(26,255,0,0.3)] opacity-90" 
+        />
       </div>
     );
   }
@@ -127,13 +132,18 @@ export default function Home() {
       <header className="sticky top-0 z-40 bg-black">
         <div className="max-w-7xl mx-auto px-4 py-3 grid grid-cols-3 items-center">
           <div className="flex items-center">
-            <img src="/load.gif" alt="Logo" className="h-10 w-auto pixelated" />
+            {/* Very subtle glow for logo */}
+            <img 
+              src="/load.gif" 
+              alt="Logo" 
+              className="h-10 w-auto pixelated drop-shadow-[0_0_8px_rgba(26,255,0,0.4)]" 
+            />
           </div>
           <div className="text-center text-sm drop-shadow-[0_0_5px_rgba(26,255,0,0.2)] font-semibold">
             {currentRace ? `RACE #${currentRace.race_number}` : 'NO ACTIVE RACE'}
           </div>
           <div className="flex justify-end items-center gap-6">
-            <a href="https://twitter.com" target="_blank" rel="noopener noreferrer" className="hover:scale-110 transition-transform">
+            <a href="https://twitter.com" target="_blank" rel="noopener noreferrer" className="hover:opacity-70 transition-opacity">
               <svg viewBox="0 0 24 24" className="h-5 w-5 fill-[#1aff00]">
                 <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"></path>
               </svg>
@@ -145,16 +155,13 @@ export default function Home() {
 
       <main className="max-w-7xl mx-auto px-4 py-6 space-y-6 relative z-10">
         
-        {/* SYNCED HEIGHT SECTION */}
         <div className="flex flex-col lg:flex-row gap-4 items-stretch">
-          {/* Timer Wrapper */}
           <div className={`lg:w-1/3 flex ${isVisualizing ? "opacity-20 grayscale pointer-events-none transition-all" : "transition-all"}`}>
             <div className="w-full flex flex-col h-full">
                <CountdownTimer seconds={timeRemaining} totalPool={totalPool} />
             </div>
           </div>
           
-          {/* Marquee Wrapper */}
           <div className="lg:w-2/3 flex">
             <div className="w-full flex flex-col h-full">
               <BetMarquee bets={recentBets} horses={horses} />
@@ -190,7 +197,7 @@ export default function Home() {
           </div>
         </div>
 
-        <footer className="text-center py-6 border-t-4 border-[#555] text-[10px] text-[#7CFF7C]">
+        <footer className="text-center py-6 text-[10px] text-[#7CFF7C]">
           BUILT ON SOLANA • ON-CHAIN HORSE RACES
         </footer>
       </main>

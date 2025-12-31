@@ -128,9 +128,13 @@ export function RaceTrack({
                     }}
                   >
                     <div className="flex flex-col items-center">
-                      <span className={`text-3xl ${internalRacing ? 'animate-gallop' : ''} ${isWinner ? 'drop-shadow-[0_0_10px_#fff]' : ''}`}>
+                    <span
+                    className={`text-3xl inline-block transform scale-x-[-1]
+                        ${internalRacing ? 'animate-gallop' : ''}
+                        ${isWinner ? 'drop-shadow-[0_0_10px_#fff]' : ''}`}
+                    >
                         🏇
-                      </span>
+                    </span>
                       <div
                         className={`text-[9px] px-1 border mt-[-4px] whitespace-nowrap ${
                             isWinner
