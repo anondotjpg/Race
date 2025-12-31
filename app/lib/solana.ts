@@ -6,7 +6,8 @@ import {
   Keypair,
   Transaction,
   SystemProgram,
-  sendAndConfirmTransaction
+  sendAndConfirmTransaction,
+  ComputeBudgetProgram
 } from '@solana/web3.js';
 import bs58 from 'bs58';
 
@@ -36,45 +37,30 @@ export async function createPumpPortalWallet(): Promise<{
   console.log('🔵 Starting PumpPortal wallet creation...');
   
   try {
-    console.log('🔵 Fetching from https://pumpportal.fun/api/create-wallet');
     const response = await fetch('https://pumpportal.fun/api/create-wallet', {
       method: 'GET',
     });
-    
-    console.log('🔵 Response status:', response.status);
     
     if (!response.ok) {
       throw new Error(`PumpPortal API error: ${response.status}`);
     }
     
     const data = await response.json();
-    console.log('🔵 PumpPortal raw response:', JSON.stringify(data, null, 2));
-    
-    // PumpPortal returns: walletPublicKey, privateKey, apiKey
     const publicKey = data.walletPublicKey;
     const privateKey = data.privateKey;
     const apiKey = data.apiKey;
     
-    console.log('🔵 Extracted publicKey:', publicKey);
-    console.log('🔵 Extracted privateKey:', privateKey ? `${privateKey.slice(0, 10)}...` : 'MISSING');
-    console.log('🔵 Extracted apiKey:', apiKey ? `${apiKey.slice(0, 10)}...` : 'MISSING');
-    
     if (!publicKey || !privateKey) {
-      console.log('🔴 Missing keys! publicKey:', !!publicKey, 'privateKey:', !!privateKey);
       throw new Error('Missing keys in PumpPortal response');
     }
     
-    console.log('🟢 PumpPortal wallet created successfully:', publicKey);
-    
+    console.log('🟢 PumpPortal wallet created:', publicKey);
     return { publicKey, privateKey, apiKey };
   } catch (error) {
-    console.error('🔴 PumpPortal failed:', error);
-    console.log('🟡 Falling back to local wallet generation...');
+    console.error('🔴 PumpPortal failed, using local:', error);
     const keypair = Keypair.generate();
-    const publicKey = keypair.publicKey.toBase58();
-    console.log('🟢 Local wallet generated:', publicKey);
     return {
-      publicKey,
+      publicKey: keypair.publicKey.toBase58(),
       privateKey: bs58.encode(keypair.secretKey),
     };
   }
@@ -102,7 +88,6 @@ export async function subscribeToWallet(
   const subscriptionId = connection.onAccountChange(
     publicKey,
     async (accountInfo, context) => {
-      // Get recent transactions to find the deposit
       const signatures = await connection.getSignaturesForAddress(publicKey, { limit: 1 });
       if (signatures.length > 0) {
         const sig = signatures[0];
@@ -116,7 +101,6 @@ export async function subscribeToWallet(
           const amount = (postBalance - preBalance) / LAMPORTS_PER_SOL;
           
           if (amount > 0) {
-            // Get sender from transaction
             const sender = tx.transaction.message.staticAccountKeys?.[0]?.toBase58() || 'unknown';
             onTransaction(sig.signature, amount, sender);
           }
@@ -129,7 +113,7 @@ export async function subscribeToWallet(
   return subscriptionId;
 }
 
-// Send SOL payout to winner
+// Send SOL payout to single winner
 export async function sendPayout(
   fromPrivateKey: string,
   toWallet: string,
@@ -160,31 +144,172 @@ export async function sendPayout(
   }
 }
 
+// ============================================================
+// BATCH PAYOUTS - Send up to 20 payouts in single transaction
+// ============================================================
+export async function sendBatchPayouts(
+  fromPrivateKey: string,
+  payouts: Array<{ wallet: string; amount: number }>
+): Promise<{ success: boolean; signature?: string; failed: number[] }> {
+  const MAX_TRANSFERS_PER_TX = 20; // Solana limit
+  
+  if (payouts.length === 0) {
+    return { success: true, failed: [] };
+  }
+
+  const fromKeypair = Keypair.fromSecretKey(bs58.decode(fromPrivateKey));
+  const failedIndices: number[] = [];
+  let lastSignature: string | undefined;
+
+  // Split into batches of 20
+  const batches: Array<Array<{ wallet: string; amount: number; index: number }>> = [];
+  for (let i = 0; i < payouts.length; i += MAX_TRANSFERS_PER_TX) {
+    batches.push(
+      payouts.slice(i, i + MAX_TRANSFERS_PER_TX).map((p, idx) => ({
+        ...p,
+        index: i + idx
+      }))
+    );
+  }
+
+  console.log(`[Batch] ${payouts.length} payouts → ${batches.length} batch(es)`);
+
+  for (let batchIdx = 0; batchIdx < batches.length; batchIdx++) {
+    const batch = batches[batchIdx];
+    
+    try {
+      const transaction = new Transaction();
+      
+      // Priority fee for faster confirmation
+      transaction.add(
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1000 })
+      );
+
+      for (const payout of batch) {
+        transaction.add(
+          SystemProgram.transfer({
+            fromPubkey: fromKeypair.publicKey,
+            toPubkey: new PublicKey(payout.wallet),
+            lamports: Math.floor(payout.amount * LAMPORTS_PER_SOL),
+          })
+        );
+      }
+
+      const signature = await sendAndConfirmTransaction(
+        connection,
+        transaction,
+        [fromKeypair],
+        { commitment: 'confirmed' }
+      );
+
+      lastSignature = signature;
+      console.log(`[Batch ${batchIdx + 1}/${batches.length}] ✓ ${batch.length} payouts`);
+      
+    } catch (error) {
+      console.error(`[Batch ${batchIdx + 1}] ✗ Failed:`, error);
+      batch.forEach(p => failedIndices.push(p.index));
+    }
+  }
+
+  return {
+    success: failedIndices.length === 0,
+    signature: lastSignature,
+    failed: failedIndices
+  };
+}
+
+// ============================================================
+// PARALLEL BATCH PAYOUTS - For 100+ payouts with concurrency
+// ============================================================
+export async function sendParallelPayouts(
+  fromPrivateKey: string,
+  payouts: Array<{ wallet: string; amount: number }>,
+  concurrency: number = 3
+): Promise<{ successful: number; failed: number; signatures: string[] }> {
+  const MAX_TRANSFERS_PER_TX = 20;
+  const fromKeypair = Keypair.fromSecretKey(bs58.decode(fromPrivateKey));
+  
+  // Split into batches of 20
+  const batches: Array<Array<{ wallet: string; amount: number }>> = [];
+  for (let i = 0; i < payouts.length; i += MAX_TRANSFERS_PER_TX) {
+    batches.push(payouts.slice(i, i + MAX_TRANSFERS_PER_TX));
+  }
+
+  console.log(`[Parallel] ${payouts.length} payouts → ${batches.length} batches @ ${concurrency} concurrent`);
+
+  const signatures: string[] = [];
+  let successful = 0;
+  let failed = 0;
+
+  // Process with concurrency limit
+  for (let i = 0; i < batches.length; i += concurrency) {
+    const chunk = batches.slice(i, i + concurrency);
+    
+    const results = await Promise.allSettled(
+      chunk.map(async (batch) => {
+        const transaction = new Transaction();
+        
+        transaction.add(
+          ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1000 })
+        );
+
+        for (const payout of batch) {
+          transaction.add(
+            SystemProgram.transfer({
+              fromPubkey: fromKeypair.publicKey,
+              toPubkey: new PublicKey(payout.wallet),
+              lamports: Math.floor(payout.amount * LAMPORTS_PER_SOL),
+            })
+          );
+        }
+
+        return sendAndConfirmTransaction(
+          connection,
+          transaction,
+          [fromKeypair],
+          { commitment: 'confirmed' }
+        );
+      })
+    );
+
+    for (let j = 0; j < results.length; j++) {
+      const result = results[j];
+      const batchSize = chunk[j].length;
+      
+      if (result.status === 'fulfilled') {
+        signatures.push(result.value);
+        successful += batchSize;
+      } else {
+        failed += batchSize;
+        console.error(`[Parallel] Batch failed:`, result.reason);
+      }
+    }
+  }
+
+  console.log(`[Parallel] Done: ${successful} ok, ${failed} failed`);
+  return { successful, failed, signatures };
+}
+
 // Verify a transaction exists and get amount (with retries)
 export async function verifyTransaction(
   signature: string,
   expectedRecipient: string
 ): Promise<{ valid: boolean; amount: number; sender: string }> {
   const MAX_RETRIES = 5;
-  const RETRY_DELAY_MS = 2000; // 2 seconds between retries
+  const RETRY_DELAY_MS = 2000;
   
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
-      console.log(`[verifyTransaction] Attempt ${attempt}/${MAX_RETRIES} for ${signature.slice(0, 20)}...`);
-      
       const tx = await connection.getTransaction(signature, {
         maxSupportedTransactionVersion: 0,
         commitment: 'confirmed'
       });
       
       if (!tx || !tx.meta) {
-        console.log(`[verifyTransaction] Transaction not found yet, attempt ${attempt}`);
-        
         if (attempt < MAX_RETRIES) {
           await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
           continue;
         }
-        
         return { valid: false, amount: 0, sender: '' };
       }
       
@@ -194,7 +319,6 @@ export async function verifyTransaction(
       );
       
       if (recipientIndex === undefined || recipientIndex === -1) {
-        console.log(`[verifyTransaction] Recipient not found in transaction`);
         return { valid: false, amount: 0, sender: '' };
       }
       
@@ -203,17 +327,12 @@ export async function verifyTransaction(
       const amount = (postBalance - preBalance) / LAMPORTS_PER_SOL;
       const sender = accountKeys?.[0]?.toBase58() || '';
       
-      console.log(`[verifyTransaction] Success! Amount: ${amount} SOL, Sender: ${sender.slice(0, 10)}...`);
-      
       return { valid: amount > 0, amount, sender };
     } catch (error) {
-      console.error(`[verifyTransaction] Error on attempt ${attempt}:`, error);
-      
       if (attempt < MAX_RETRIES) {
         await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
         continue;
       }
-      
       return { valid: false, amount: 0, sender: '' };
     }
   }
@@ -221,25 +340,21 @@ export async function verifyTransaction(
   return { valid: false, amount: 0, sender: '' };
 }
 
-// Aggregate all horse wallets into house wallet for payouts
+// Aggregate horse wallets → house wallet (sequential)
 export async function aggregateFunds(
   horsePrivateKeys: string[],
   houseWallet: string
 ): Promise<number> {
   let totalCollected = 0;
-  
-  // Minimum balance to keep account rent-exempt (~0.00089 SOL) + tx fee
-  const MIN_BALANCE_LAMPORTS = 1400000; // ~0.0009 SOL
+  const MIN_BALANCE_LAMPORTS = 900000; // Keep for rent
   
   for (const privateKey of horsePrivateKeys) {
     try {
       const keypair = Keypair.fromSecretKey(bs58.decode(privateKey));
       const balance = await connection.getBalance(keypair.publicKey);
-      
-      // Only send if we have more than minimum + some buffer
       const sendAmount = balance - MIN_BALANCE_LAMPORTS;
       
-      if (sendAmount > 10000) { // Only send if > 0.00001 SOL profit
+      if (sendAmount > 10000) {
         const transaction = new Transaction().add(
           SystemProgram.transfer({
             fromPubkey: keypair.publicKey,
@@ -250,12 +365,60 @@ export async function aggregateFunds(
         
         await sendAndConfirmTransaction(connection, transaction, [keypair]);
         totalCollected += sendAmount / LAMPORTS_PER_SOL;
-        console.log(`Aggregated ${sendAmount / LAMPORTS_PER_SOL} SOL from ${keypair.publicKey.toBase58()}`);
       }
     } catch (error) {
-      console.error('Failed to aggregate from wallet:', error);
+      console.error('Aggregate failed:', error);
     }
   }
   
   return totalCollected;
+}
+
+// ============================================================
+// PARALLEL AGGREGATE - Faster collection from horse wallets
+// ============================================================
+export async function batchAggregateFunds(
+  horsePrivateKeys: string[],
+  houseWallet: string,
+  concurrency: number = 5
+): Promise<{ collected: number; failed: number }> {
+  const MIN_BALANCE_LAMPORTS = 900000;
+  let totalCollected = 0;
+  let failedCount = 0;
+
+  for (let i = 0; i < horsePrivateKeys.length; i += concurrency) {
+    const batch = horsePrivateKeys.slice(i, i + concurrency);
+    
+    const results = await Promise.allSettled(
+      batch.map(async (privateKey) => {
+        const keypair = Keypair.fromSecretKey(bs58.decode(privateKey));
+        const balance = await connection.getBalance(keypair.publicKey);
+        const sendAmount = balance - MIN_BALANCE_LAMPORTS;
+        
+        if (sendAmount <= 10000) return 0;
+        
+        const transaction = new Transaction().add(
+          SystemProgram.transfer({
+            fromPubkey: keypair.publicKey,
+            toPubkey: new PublicKey(houseWallet),
+            lamports: sendAmount,
+          })
+        );
+        
+        await sendAndConfirmTransaction(connection, transaction, [keypair]);
+        return sendAmount / LAMPORTS_PER_SOL;
+      })
+    );
+    
+    for (const result of results) {
+      if (result.status === 'fulfilled') {
+        totalCollected += result.value;
+      } else {
+        failedCount++;
+      }
+    }
+  }
+
+  console.log(`[Aggregate] ${totalCollected.toFixed(4)} SOL collected, ${failedCount} failed`);
+  return { collected: totalCollected, failed: failedCount };
 }
