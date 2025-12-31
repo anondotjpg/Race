@@ -28,7 +28,11 @@ export default function Home() {
   const [betSuccess, setBetSuccess] = useState<string | null>(null);
 
   const handleBet = async (horseId: number, amount: number) => {
-    if (!connected || !wallet) {
+    // Double-check connection by looking at Phantom directly
+    const phantom = (window as any).phantom?.solana || (window as any).solana;
+    const isReallyConnected = phantom?.isConnected && phantom?.publicKey;
+    
+    if (!isReallyConnected) {
       setBetError('Please connect your wallet first');
       setTimeout(() => setBetError(null), 3000);
       return;
@@ -66,7 +70,7 @@ export default function Home() {
           raceId: currentRace.id,
           horseId,
           txSignature: signature,
-          bettorWallet: wallet
+          bettorWallet: phantom.publicKey.toBase58()
         })
       });
 

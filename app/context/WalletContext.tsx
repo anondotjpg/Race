@@ -1,53 +1,13 @@
 // context/WalletContext.tsx
 'use client';
 
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode, useRef, useSyncExternalStore } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL, Connection, clusterApiUrl } from '@solana/web3.js';
-
-interface PhantomProvider {
-  isPhantom: boolean;
-  publicKey: PublicKey | null;
-  isConnected: boolean;
-  connect: () => Promise<{ publicKey: PublicKey }>;
-  disconnect: () => Promise<void>;
-  signAndSendTransaction: (transaction: Transaction) => Promise<{ signature: string }>;
-  on: (event: string, callback: (args: any) => void) => void;
-  off: (event: string, callback: (args: any) => void) => void;
-}
-
-// Global wallet store (outside React)
-let walletAddress: string | null = null;
-let phantomProvider: PhantomProvider | null = null;
-const listeners = new Set<() => void>();
-
-function getWallet() {
-  return walletAddress;
-}
-
-function getProvider() {
-  return phantomProvider;
-}
-
-function setWallet(addr: string | null) {
-  walletAddress = addr;
-  listeners.forEach(l => l());
-}
-
-function setProvider(p: PhantomProvider | null) {
-  phantomProvider = p;
-  listeners.forEach(l => l());
-}
-
-function subscribe(listener: () => void) {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
 
 interface WalletContextType {
   wallet: string | null;
   connected: boolean;
   connecting: boolean;
-  error: string | null;
   hasProvider: boolean;
   connect: () => Promise<void>;
   disconnect: () => Promise<void>;
@@ -57,110 +17,124 @@ interface WalletContextType {
 const WalletContext = createContext<WalletContextType | null>(null);
 
 export function WalletProvider({ children }: { children: ReactNode }) {
+  const [wallet, setWallet] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  
-  // Use external store for wallet - ensures all components see same value
-  const wallet = useSyncExternalStore(subscribe, getWallet, () => null);
-  const provider = useSyncExternalStore(subscribe, getProvider, () => null);
+  const [hasProvider, setHasProvider] = useState(false);
 
-  // Detect Phantom provider on mount
-  useEffect(() => {
-    const detectProvider = () => {
-      const win = window as any;
-      const phantom = win.phantom?.solana || win.solana;
-      
-      if (phantom?.isPhantom) {
-        setProvider(phantom);
-        
-        // Check if already connected
-        if (phantom.isConnected && phantom.publicKey) {
-          setWallet(phantom.publicKey.toBase58());
-        }
-        
-        // Listen for events
-        phantom.on('connect', () => {
-          if (phantom.publicKey) {
-            setWallet(phantom.publicKey.toBase58());
-          }
-        });
-        
-        phantom.on('disconnect', () => {
-          setWallet(null);
-        });
-        
-        phantom.on('accountChanged', (pk: PublicKey | null) => {
-          setWallet(pk ? pk.toBase58() : null);
-        });
-        
-        return true;
+  // Get Phantom provider
+  const getPhantom = () => {
+    if (typeof window === 'undefined') return null;
+    const win = window as any;
+    return win.phantom?.solana || win.solana || null;
+  };
+
+  // Check connection status
+  const checkConnection = () => {
+    const phantom = getPhantom();
+    if (phantom?.isPhantom) {
+      setHasProvider(true);
+      if (phantom.isConnected && phantom.publicKey) {
+        setWallet(phantom.publicKey.toBase58());
+      } else {
+        setWallet(null);
       }
-      return false;
+    }
+  };
+
+  // Initialize and set up listeners
+  useEffect(() => {
+    const phantom = getPhantom();
+    
+    if (!phantom?.isPhantom) {
+      // Retry a few times
+      const t1 = setTimeout(checkConnection, 100);
+      const t2 = setTimeout(checkConnection, 500);
+      const t3 = setTimeout(checkConnection, 1000);
+      return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+    }
+
+    setHasProvider(true);
+    
+    // Check if already connected
+    if (phantom.isConnected && phantom.publicKey) {
+      setWallet(phantom.publicKey.toBase58());
+    }
+
+    // Event handlers
+    const onConnect = () => {
+      const p = getPhantom();
+      if (p?.publicKey) setWallet(p.publicKey.toBase58());
+    };
+    
+    const onDisconnect = () => setWallet(null);
+    
+    const onAccountChange = (pk: any) => {
+      if (pk) setWallet(pk.toBase58());
+      else setWallet(null);
     };
 
-    if (!detectProvider()) {
-      // Retry after delays
-      setTimeout(detectProvider, 300);
-      setTimeout(detectProvider, 1000);
-    }
+    phantom.on('connect', onConnect);
+    phantom.on('disconnect', onDisconnect);
+    phantom.on('accountChanged', onAccountChange);
+
+    // Poll connection status every second (backup)
+    const interval = setInterval(checkConnection, 1000);
+
+    return () => {
+      phantom.off('connect', onConnect);
+      phantom.off('disconnect', onDisconnect);
+      phantom.off('accountChanged', onAccountChange);
+      clearInterval(interval);
+    };
   }, []);
 
-  const connect = useCallback(async () => {
-    const p = getProvider();
-    if (!p) {
+  const connect = async () => {
+    const phantom = getPhantom();
+    if (!phantom) {
       window.open('https://phantom.app/', '_blank');
       return;
     }
 
     try {
       setConnecting(true);
-      setError(null);
-      const response = await p.connect();
-      setWallet(response.publicKey.toBase58());
-    } catch (err: any) {
-      setError(err.message || 'Failed to connect');
+      const resp = await phantom.connect();
+      setWallet(resp.publicKey.toBase58());
+    } catch (e) {
+      console.error('Connect failed:', e);
     } finally {
       setConnecting(false);
     }
-  }, []);
+  };
 
-  const disconnect = useCallback(async () => {
-    const p = getProvider();
-    if (!p) return;
-    try {
-      await p.disconnect();
-      setWallet(null);
-    } catch (err: any) {
-      setError(err.message || 'Failed to disconnect');
+  const disconnect = async () => {
+    const phantom = getPhantom();
+    if (phantom) {
+      try {
+        await phantom.disconnect();
+      } catch (e) {
+        console.error('Disconnect failed:', e);
+      }
     }
-  }, []);
+    setWallet(null);
+  };
 
-  const sendBet = useCallback(async (
-    recipientAddress: string,
-    amountSol: number
-  ): Promise<string | null> => {
-    const p = getProvider();
-    const w = getWallet();
+  const sendBet = async (recipientAddress: string, amountSol: number): Promise<string | null> => {
+    const phantom = getPhantom();
     
-    if (!p) {
-      setError('Phantom not detected');
+    // Re-check wallet status
+    if (!phantom?.isConnected || !phantom?.publicKey) {
       return null;
     }
     
-    if (!w) {
-      setError('Wallet not connected');
-      return null;
-    }
+    const currentWallet = phantom.publicKey.toBase58();
 
     try {
-      setError(null);
-      
       const connection = new Connection(
         process.env.NEXT_PUBLIC_SOLANA_RPC || clusterApiUrl('mainnet-beta'),
         'confirmed'
       );
       
-      const fromPubkey = new PublicKey(w);
+      const fromPubkey = new PublicKey(currentWallet);
       const toPubkey = new PublicKey(recipientAddress);
       
       const transaction = new Transaction().add(
@@ -175,28 +149,24 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       transaction.recentBlockhash = blockhash;
       transaction.feePayer = fromPubkey;
       
-      const { signature } = await p.signAndSendTransaction(transaction);
-      
+      const { signature } = await phantom.signAndSendTransaction(transaction);
       return signature;
-    } catch (err: any) {
-      setError(err.message || 'Transaction failed');
+    } catch (e) {
+      console.error('Transaction failed:', e);
       return null;
     }
-  }, []);
-
-  const value: WalletContextType = {
-    wallet,
-    connected: !!wallet,
-    connecting,
-    error,
-    hasProvider: !!provider,
-    connect,
-    disconnect,
-    sendBet,
   };
 
   return (
-    <WalletContext.Provider value={value}>
+    <WalletContext.Provider value={{
+      wallet,
+      connected: !!wallet,
+      connecting,
+      hasProvider,
+      connect,
+      disconnect,
+      sendBet,
+    }}>
       {children}
     </WalletContext.Provider>
   );
