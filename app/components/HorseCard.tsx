@@ -10,43 +10,7 @@ interface HorseCardProps {
   isWinner?: boolean;
 }
 
-const COLORS: Record<
-  string,
-  { bg: string; text: string; accent: string; glow: string }
-> = {
-  '#FFD700': {
-    bg: 'from-amber-500/10 to-yellow-500/5',
-    text: 'text-amber-600',
-    accent: 'bg-amber-500',
-    glow: 'shadow-amber-500/20',
-  },
-  '#8B5CF6': {
-    bg: 'from-violet-500/10 to-purple-500/5',
-    text: 'text-violet-600',
-    accent: 'bg-violet-500',
-    glow: 'shadow-violet-500/20',
-  },
-  '#EF4444': {
-    bg: 'from-red-500/10 to-rose-500/5',
-    text: 'text-red-600',
-    accent: 'bg-red-500',
-    glow: 'shadow-red-500/20',
-  },
-  '#06B6D4': {
-    bg: 'from-cyan-500/10 to-teal-500/5',
-    text: 'text-cyan-600',
-    accent: 'bg-cyan-500',
-    glow: 'shadow-cyan-500/20',
-  },
-  '#10B981': {
-    bg: 'from-emerald-500/10 to-green-500/5',
-    text: 'text-emerald-600',
-    accent: 'bg-emerald-500',
-    glow: 'shadow-emerald-500/20',
-  },
-};
-
-const QUICK_AMOUNTS = [0.05, 0.1, 0.25, 0.5, 1];
+const QUICK_AMOUNTS = [0.05, 0.1, 0.25, 0.5];
 
 export function HorseCard({
   horse,
@@ -54,8 +18,6 @@ export function HorseCard({
   disabled = false,
   isWinner = false,
 }: HorseCardProps) {
-  const colors = COLORS[horse.color] || COLORS['#8B5CF6'];
-
   const [amount, setAmount] = useState('0.1');
   const [betting, setBetting] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -81,8 +43,8 @@ export function HorseCard({
     try {
       await navigator.clipboard.writeText(horse.wallet_address);
       setCopied(true);
-      setTimeout(() => setCopied(false), 1800);
-    } catch { /* ignore */ }
+      setTimeout(() => setCopied(false), 1600);
+    } catch {}
   };
 
   const handleAmountChange = (v: string) => {
@@ -90,93 +52,99 @@ export function HorseCard({
     setAmount(v);
   };
 
-  // Check if odds are a valid number greater than 0
   const hasValidOdds = horse.odds && Number(horse.odds) > 0;
 
   return (
     <div
       className={`
-        relative overflow-visible rounded-2xl transition-all duration-300
-        ${isWinner ? `rounded-2xl shadow-lg ${colors.glow}` : 'shadow-sm hover:shadow-md'}
-        ${disabled ? 'opacity-60 pointer-events-none' : ''}
+        relative bg-black border-4 border-[#555]
+        font-mono uppercase tracking-tight
+        ${disabled ? 'opacity-50 pointer-events-none' : ''}
+        ${isWinner ? 'shadow-[0_0_20px_rgba(255,215,0,0.4)]' : ''}
       `}
     >
-      <div className="absolute inset-0 bg-white/80 rounded-2xl" />
+      {/* CRT scanlines */}
+      <div className="absolute inset-0 pointer-events-none opacity-10 bg-[linear-gradient(rgba(0,0,0,0)_50%,rgba(0,0,0,0.35)_50%)] bg-[length:100%_4px]" />
 
+      {/* WINNER BADGE */}
       {isWinner && (
-        <div className="absolute -top-5 -right-5 z-10 flex items-center gap-1 px-2 py-1 rounded-full">
-          <span className="text-3xl">👑</span>
+        <div className="absolute -top-4 -right-4 bg-yellow-500 text-black px-2 py-1 text-xs border-2 border-black shadow">
+          👑 WINNER
         </div>
       )}
 
-      <div className="relative p-5">
+      <div className="relative p-4 space-y-4">
         {/* HEADER */}
-        <div className="flex justify-between items-start mb-4">
-          <div className="flex gap-3">
-            <div>
-              <h3 className="font-semibold text-gray-900">{horse.name}</h3>
+        <div className="flex justify-between items-start">
+          <div>
+            <div className="text-[#1aff00] text-lg leading-none">
+              {horse.name}
+            </div>
+            <div className="text-[10px] text-[#7CFF7C] opacity-70">
+              HORSE ID #{horse.id}
             </div>
           </div>
 
-          {/* FIXED: Only shows if odds are > 0. Prevents "0" rendering in JSX */}
           {hasValidOdds && (
             <div className="text-right">
-              <div className={`text-2xl font-bold ${colors.text}`}>
-                {horse.odds}
-                <span className="text-sm font-normal text-gray-400 ml-0.5">x</span>
+              <div className="text-yellow-400 text-2xl leading-none">
+                {horse.odds}x
               </div>
-              <p className="text-xs text-gray-400">odds</p>
+              <div className="text-[10px] text-yellow-300 opacity-70">
+                ODDS
+              </div>
             </div>
           )}
         </div>
 
         {/* STATS */}
-        <div className="grid grid-cols-2 gap-3 mb-4">
-          <div className="bg-gray-50 rounded-xl p-3">
-            <p className="text-xs text-gray-500 mb-1">Total</p>
-            <p className="font-semibold text-gray-900">
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <div className="border-2 border-[#333] p-2 bg-[#050505]">
+            <div className="text-[#7CFF7C] opacity-70">TOTAL</div>
+            <div className="text-[#1aff00]">
               {horse.totalBets?.toFixed(3) ?? '0.000'}
-            </p>
+            </div>
           </div>
 
-          <div className="bg-gray-50 rounded-xl p-3">
-            <p className="text-xs text-gray-500 mb-1">Pool</p>
-            <p className="font-semibold text-gray-900">
-              {(horse as any).percentage ?? '0'}
-              <span className="text-gray-400 font-normal">%</span>
-            </p>
+          <div className="border-2 border-[#333] p-2 bg-[#050505]">
+            <div className="text-[#7CFF7C] opacity-70">POOL</div>
+            <div className="text-[#1aff00]">
+              {(horse as any).percentage ?? '0'}%
+            </div>
           </div>
         </div>
 
         {/* WALLET */}
-        <div className="mb-4">
-          <p className="text-xs text-gray-500 mb-2">Deposit Address</p>
+        <div>
+          <div className="text-[10px] text-[#7CFF7C] mb-1">
+            DEPOSIT ADDRESS
+          </div>
           <button
             onClick={copyAddress}
-            type="button"
-            className="w-full flex items-center justify-between gap-2 p-3 bg-gray-50 hover:bg-gray-100 rounded-xl transition-colors group"
+            className="w-full border-2 border-[#333] bg-black p-2 flex justify-between items-center hover:bg-[#050505]"
           >
-            <code className="text-xs text-gray-600 font-mono truncate">
+            <code className="text-[10px] text-[#1aff00] truncate">
               {horse.wallet_address}
             </code>
-            <span className={`text-xs font-medium ${copied ? 'text-green-600' : 'text-gray-400 group-hover:text-gray-600'}`}>
-              {copied ? '✓ Copied' : 'Copy'}
+            <span className="text-[10px] text-yellow-400">
+              {copied ? 'COPIED' : 'COPY'}
             </span>
           </button>
         </div>
 
-        {/* QUICK AMOUNTS */}
-        <div className="flex gap-1.5 mb-3">
+        {/* QUICK BETS */}
+        <div className="flex gap-1">
           {QUICK_AMOUNTS.map(amt => {
             const active = amount === amt.toString();
             return (
               <button
                 key={amt}
-                type="button"
                 onClick={() => setAmount(amt.toString())}
                 className={`
-                  flex-1 py-2 rounded-lg text-xs font-medium transition-all
-                  ${active ? `${colors.accent} text-white shadow-sm` : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}
+                  flex-1 py-2 text-xs border-2
+                  ${active
+                    ? 'bg-[#1aff00] text-black border-black'
+                    : 'bg-black text-[#7CFF7C] border-[#333] hover:bg-[#050505]'}
                 `}
               >
                 {amt}
@@ -187,37 +155,30 @@ export function HorseCard({
 
         {/* BET INPUT */}
         <div className="flex gap-2">
-          <div className="relative flex-1">
+          <div className="flex-1 relative">
             <input
               type="text"
               inputMode="decimal"
               value={amount}
               onChange={e => handleAmountChange(e.target.value)}
-              placeholder="0.00"
-              className="w-full px-4 py-3 pr-14 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 font-medium focus:outline-none focus:ring-2 focus:ring-gray-900 transition"
+              className="w-full bg-black border-2 border-[#333] px-3 py-2 text-[#1aff00] text-sm focus:outline-none focus:border-[#1aff00]"
             />
-            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-medium">SOL</span>
+            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-[#7CFF7C]">
+              SOL
+            </span>
           </div>
 
           <button
             onClick={handleBet}
             disabled={betting || disabled}
-            className={`
-              px-6 py-3 rounded-xl font-semibold text-white transition-all
-              ${colors.accent}
-              hover:opacity-90 active:scale-95
-              disabled:opacity-50 disabled:cursor-not-allowed
-              shadow-lg ${colors.glow}
-            `}
+            className="
+              px-4 border-2 border-yellow-400
+              bg-yellow-500 text-black font-bold
+              hover:bg-yellow-400 active:scale-95
+              disabled:opacity-50
+            "
           >
-            {betting ? (
-              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-              </svg>
-            ) : (
-              'Bet'
-            )}
+            {betting ? '...' : 'BET'}
           </button>
         </div>
       </div>
