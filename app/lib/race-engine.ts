@@ -1,10 +1,11 @@
 // lib/race-engine.ts
 import { createServerSupabaseClient } from './supabase';
-import { sendPayout, aggregateFunds } from './solana';
+import { sendPayout, aggregateFunds, getWalletBalance } from './solana';
 import type { Bet, RaceResult } from '../types';
 
 const HOUSE_FEE_PERCENT = 7;
 const RACE_DURATION_MS = 5 * 60 * 1000; // 5 minutes betting
+const MIN_RENT_SOL = 0.001; // Minimum to keep in wallet
 
 // ─────────────────────────────────────────────
 // PURE LOGIC
@@ -15,13 +16,10 @@ export function determineWinner(
 ): number {
   const total = horseBets.reduce((s, h) => s + h.totalBets, 0);
 
-  // If no bets, random winner (equal chance)
   if (total === 0) {
     return horseBets[Math.floor(Math.random() * horseBets.length)].horseId;
   }
 
-  // Direct proportional: more bets = higher chance to win
-  // 75% of bets on Horse 1 = 75% chance to win
   let r = Math.random() * total;
 
   for (const h of horseBets) {
@@ -69,7 +67,7 @@ export function calculatePayouts(
 }
 
 // ─────────────────────────────────────────────
-// EXECUTE / FINALIZE RACE
+// EXECUTE / FINALIZE RACE (WITH ATOMIC LOCK)
 // ─────────────────────────────────────────────
 
 export async function executeRace(
@@ -77,29 +75,43 @@ export async function executeRace(
 ): Promise<RaceResult | null> {
   const supabase = createServerSupabaseClient();
 
-  const { data: race } = await supabase
+  // ATOMIC: Try to claim the race by setting status to 'executing'
+  // This prevents duplicate execution from Client + Vercel cron
+  const { data: claimed, error: claimError } = await supabase
     .from('races')
-    .select('*')
+    .update({ 
+      status: 'executing',
+      updated_at: new Date().toISOString()
+    })
     .eq('id', raceId)
+    .eq('status', 'betting')  // Only if still in betting
+    .select()
     .single();
 
-  if (!race) return null;
-
-  // Already finished - return cached result
-  if (race.status === 'finished') {
-    return {
-      raceId,
-      winningHorseId: race.winning_horse_id,
-      winningHorseName: race.winning_horse_name ?? 'Unknown',
-      positions: race.final_positions ?? [],
-      payouts: [],
-    };
-  }
-
-  // Only execute if still in betting status
-  if (race.status !== 'betting') {
+  if (claimError || !claimed) {
+    // Race already being executed or finished
+    console.log('[Race] Already executing/finished, skipping');
+    
+    // Check if already finished - return cached result
+    const { data: race } = await supabase
+      .from('races')
+      .select('*')
+      .eq('id', raceId)
+      .single();
+      
+    if (race?.status === 'finished' && race.winning_horse_id) {
+      return {
+        raceId,
+        winningHorseId: race.winning_horse_id,
+        winningHorseName: race.winning_horse_name ?? 'Unknown',
+        positions: race.final_positions ?? [],
+        payouts: [],
+      };
+    }
     return null;
   }
+
+  console.log('[Race] Claimed race for execution:', raceId);
 
   const { data: horses } = await supabase.from('horses').select('*');
   const { data: bets } = await supabase
@@ -108,7 +120,11 @@ export async function executeRace(
     .eq('race_id', raceId)
     .eq('status', 'confirmed');
 
-  if (!horses || horses.length === 0) return null;
+  if (!horses || horses.length === 0) {
+    // Rollback status
+    await supabase.from('races').update({ status: 'betting' }).eq('id', raceId);
+    return null;
+  }
 
   const horseTotals = horses.map(h => ({
     horseId: h.id,
@@ -127,7 +143,7 @@ export async function executeRace(
 
   const payouts = calculatePayouts(winnerId, bets ?? []);
 
-  // Update race DIRECTLY to finished (skip 'racing' status)
+  // Update race to finished
   const { error: updateError } = await supabase
     .from('races')
     .update({
@@ -138,8 +154,7 @@ export async function executeRace(
       finished_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     })
-    .eq('id', raceId)
-    .eq('status', 'betting');  // Only update if still betting
+    .eq('id', raceId);
 
   if (updateError) {
     console.error('Failed to update race:', updateError);
@@ -156,14 +171,10 @@ export async function executeRace(
         status: bet.horse_id === winnerId ? 'paid' : 'lost',
         payout,
       })
-      .eq('id', bet.id)
-      .eq('status', 'confirmed');
+      .eq('id', bet.id);
   }
 
   // House Wallet Payouts
-  // 1. Aggregate all horse wallets → House
-  // 2. House keeps 5% fee
-  // 3. House sends payouts to winners
   const houseWallet = process.env.HOUSE_WALLET_ADDRESS;
   const housePrivateKey = process.env.HOUSE_WALLET_PRIVATE_KEY;
 
@@ -184,40 +195,73 @@ export async function executeRace(
         console.log(`Aggregated ${aggregated} SOL to house wallet`);
       }
 
-      // Send payouts from House Wallet → Winners
-      for (const p of payouts) {
-        try {
-          const txSignature = await sendPayout(housePrivateKey, p.wallet, p.amount);
+      // Check house wallet balance before payouts
+      const houseBalance = await getWalletBalance(houseWallet);
+      const totalPayouts = payouts.reduce((s, p) => s + p.amount, 0);
+      
+      console.log(`House balance: ${houseBalance} SOL, Total payouts: ${totalPayouts} SOL`);
 
+      if (houseBalance < totalPayouts + MIN_RENT_SOL) {
+        console.error(`Insufficient house balance for payouts!`);
+        // Record as pending
+        for (const p of payouts) {
           await supabase.from('payouts').insert({
             race_id: raceId,
             bet_id: p.betId,
             recipient_wallet: p.wallet,
             amount: p.amount,
-            tx_signature: txSignature,
-            status: txSignature ? 'sent' : 'failed',
+            status: 'pending',
           });
-
-          if (txSignature) {
-            console.log(`Payout sent: ${p.amount} SOL to ${p.wallet}`);
+        }
+      } else {
+        // Send payouts from House Wallet → Winners
+        for (const p of payouts) {
+          // Check remaining balance before each payout
+          const currentBalance = await getWalletBalance(houseWallet);
+          if (currentBalance < p.amount + MIN_RENT_SOL) {
+            console.error(`Insufficient balance for payout: ${currentBalance} < ${p.amount}`);
+            await supabase.from('payouts').insert({
+              race_id: raceId,
+              bet_id: p.betId,
+              recipient_wallet: p.wallet,
+              amount: p.amount,
+              status: 'pending',
+            });
+            continue;
           }
-        } catch (err) {
-          console.error(`Payout failed for ${p.wallet}:`, err);
 
-          await supabase.from('payouts').insert({
-            race_id: raceId,
-            bet_id: p.betId,
-            recipient_wallet: p.wallet,
-            amount: p.amount,
-            status: 'failed',
-          });
+          try {
+            const txSignature = await sendPayout(housePrivateKey, p.wallet, p.amount);
+
+            await supabase.from('payouts').insert({
+              race_id: raceId,
+              bet_id: p.betId,
+              recipient_wallet: p.wallet,
+              amount: p.amount,
+              tx_signature: txSignature,
+              status: txSignature ? 'sent' : 'failed',
+            });
+
+            if (txSignature) {
+              console.log(`Payout sent: ${p.amount} SOL to ${p.wallet}`);
+            }
+          } catch (err) {
+            console.error(`Payout failed for ${p.wallet}:`, err);
+
+            await supabase.from('payouts').insert({
+              race_id: raceId,
+              bet_id: p.betId,
+              recipient_wallet: p.wallet,
+              amount: p.amount,
+              status: 'failed',
+            });
+          }
         }
       }
     } catch (err) {
       console.error('Payout process failed:', err);
     }
   } else if (payouts.length > 0) {
-    // No house wallet configured - record as pending
     console.log('No house wallet configured, recording payouts as pending');
     for (const p of payouts) {
       await supabase.from('payouts').insert({
@@ -250,27 +294,20 @@ export async function startNewRace(): Promise<string | null> {
   const supabase = createServerSupabaseClient();
   const now = Date.now();
 
-  console.log('[startNewRace] Checking for active races...');
-
-  // Only check for 'betting' status (we skip 'racing' now)
-  const { data: active, error: activeError } = await supabase
+  // Check for any active race (betting or executing)
+  const { data: active } = await supabase
     .from('races')
     .select('id, status')
-    .eq('status', 'betting')
+    .in('status', ['betting', 'executing'])
     .limit(1)
     .maybeSingle();
 
-  if (activeError) {
-    console.error('[startNewRace] Query error:', activeError);
-    return null;
-  }
-
   if (active) {
-    console.log('[startNewRace] Active betting race exists:', active.id);
+    console.log('[startNewRace] Active race exists:', active.id, active.status);
     return null;
   }
 
-  console.log('[startNewRace] No active race, creating new one...');
+  console.log('[startNewRace] Creating new race...');
 
   const { data, error: insertError } = await supabase
     .from('races')
@@ -324,7 +361,6 @@ export async function recordBet(
 
   if (existing) return true;
 
-  // Insert bet (totalPool calculated from bets in horses API)
   const { error } = await supabase.from('bets').insert({
     race_id: raceId,
     horse_id: horseId,

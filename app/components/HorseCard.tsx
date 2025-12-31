@@ -115,8 +115,9 @@ export function HorseCard({
               <div className="text-yellow-400 text-xl leading-none font-black">
                 {horse.odds}x
               </div>
+              {/* UPDATED LABEL */}
               <div className="text-[10px] text-yellow-300 opacity-70">
-                ODDS
+                PROB
               </div>
             </div>
           </div>
