@@ -97,7 +97,7 @@ export function RaceTrack({
   return (
     <div className="relative bg-black p-2 border-4 border-[#555] font-mono shadow-[0_0_20px_rgba(0,0,0,0.4)]">
       <div className="bg-[#222] p-1 border-2 border-[#444]">
-        <div className="relative bg-emerald-900 border-y-2 border-emerald-700 overflow-hidden h-64">
+        <div className="relative bg-emerald-900 border-y-2 border-emerald-700 overflow-hidden h-84">
           
           {/* FINISH LINE - Z-INDEX 10 */}
           <div className="absolute right-12 inset-y-0 w-4 z-10" 
@@ -110,7 +110,7 @@ export function RaceTrack({
           {horses.map((horse, index) => {
             const isWinner = horse.id === winningHorseId && !internalRacing && !isRacing && (positions[horse.id] > 50);
             return (
-              <div key={horse.id} className="relative h-12 border-b border-emerald-800/50 flex items-center">
+              <div key={horse.id} className="relative h-16 border-b border-emerald-800/50 flex items-center">
                 {/* LANE NUMBER - Z-INDEX 30 (Always on top) */}
                 <div className="w-8 bg-black/80 text-[10px] text-[#1aff00] flex items-center justify-center border-r border-emerald-700 h-full z-30">
                   {index + 1}
