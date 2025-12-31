@@ -145,16 +145,14 @@ export default function Home() {
 
       <main className="max-w-7xl mx-auto px-4 py-6 space-y-6 relative z-10">
         
-        {/* SYNCED HEIGHT SECTION */}
+        {/* TIMER & MARQUEE - SYNCED HEIGHT */}
         <div className="flex flex-col lg:flex-row gap-4 items-stretch">
-          {/* Timer Wrapper */}
           <div className={`lg:w-1/3 flex ${isVisualizing ? "opacity-20 grayscale pointer-events-none transition-all" : "transition-all"}`}>
             <div className="w-full flex flex-col h-full">
                <CountdownTimer seconds={timeRemaining} totalPool={totalPool} />
             </div>
           </div>
           
-          {/* Marquee Wrapper */}
           <div className="lg:w-2/3 flex">
             <div className="w-full flex flex-col h-full">
               <BetMarquee bets={recentBets} horses={horses} />
@@ -162,10 +160,11 @@ export default function Home() {
           </div>
         </div>
 
+        {/* RACETRACK - Reset triggered when showResults is false */}
         <RaceTrack
           horses={horses}
           isRacing={isRacing}
-          winningHorseId={lastResult?.winningHorseId}
+          winningHorseId={showResults ? lastResult?.winningHorseId : undefined}
           finalPositions={racePositions} 
           timeRemaining={timeRemaining}
         />

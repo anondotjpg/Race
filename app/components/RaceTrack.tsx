@@ -16,7 +16,6 @@ export function RaceTrack({
   isRacing,
   winningHorseId,
   finalPositions,
-  timeRemaining,
 }: RaceTrackProps) {
   const [positions, setPositions] = useState<Record<number, number>>({});
   const [internalRacing, setInternalRacing] = useState(false);
@@ -29,9 +28,8 @@ export function RaceTrack({
   const RACE_DURATION = 8000; 
 
   const startRace = () => {
-    // 1. CLEAR previous positions for the new race start
+    // Clear and start
     setPositions(Object.fromEntries(horses.map(h => [h.id, 0])));
-    
     setInternalRacing(true);
     raceTokenRef.current += 1;
     const token = raceTokenRef.current;
@@ -40,14 +38,11 @@ export function RaceTrack({
     horseStatsRef.current = Object.fromEntries(
       horses.map((h) => {
         const rank = finalPositions?.indexOf(h.id) ?? 2; 
-        return [
-          h.id,
-          {
-            base: 0.85 + Math.random() * 0.1,
-            kick: (4 - rank) * 1.5,
-            freq: 80 + Math.random() * 100,
-          },
-        ];
+        return [h.id, {
+          base: 0.85 + Math.random() * 0.1,
+          kick: (4 - rank) * 1.5,
+          freq: 80 + Math.random() * 100,
+        }];
       })
     );
 
@@ -73,8 +68,7 @@ export function RaceTrack({
           const jitter = Math.sin(time / s.freq + h.id) * (t > 0.9 ? 0.1 : 0.7);
           let pos = phase * baseDistance * s.base + jitter;
           
-          if (t >= 1) pos = 80 + finishOffset; // LOCK POSITION
-
+          if (t >= 1) pos = 80 + finishOffset; 
           next[h.id] = Math.max(0, pos);
         });
         return next;
@@ -90,12 +84,18 @@ export function RaceTrack({
     requestRef.current = requestAnimationFrame(animate);
   };
 
-  // Triggered ONLY when isRacing becomes true (New Race Start)
+  // Trigger Race
   useEffect(() => {
-    if (isRacing) {
-      startRace();
-    }
+    if (isRacing) startRace();
   }, [isRacing]);
+
+  // RESET TRIGGER: Move back to start when modal closes
+  useEffect(() => {
+    if (!isRacing && !internalRacing && !winningHorseId) {
+      const reset = Object.fromEntries(horses.map(h => [h.id, 0]));
+      setPositions(reset);
+    }
+  }, [isRacing, internalRacing, winningHorseId, horses]);
 
   return (
     <div className="relative bg-black p-2 border-4 border-[#555] font-mono shadow-[0_0_20px_rgba(0,0,0,0.4)]">
@@ -105,7 +105,7 @@ export function RaceTrack({
                style={{ backgroundImage: 'repeating-conic-gradient(#000 0 25%, #fff 0 50%)', backgroundSize: '8px 8px' }} />
 
           {horses.map((horse, index) => {
-            const isWinner = horse.id === winningHorseId && !internalRacing && !isRacing && (positions[horse.id] > 50);
+            const isWinner = horse.id === winningHorseId && !internalRacing && !isRacing;
             return (
               <div key={horse.id} className="relative h-12 border-b border-emerald-800/50 flex items-center">
                 <div className="w-8 bg-black/80 text-[10px] text-[#1aff00] flex items-center justify-center border-r border-emerald-700 h-full z-20">
@@ -117,7 +117,6 @@ export function RaceTrack({
                     style={{
                       left: `${positions[horse.id] ?? 0}%`,
                       transform: 'translateY(-50%)',
-                      // No transition during race; smooth slide ONLY if we manually reset
                       transition: internalRacing ? 'none' : 'left 1s ease-in-out'
                     }}
                   >
