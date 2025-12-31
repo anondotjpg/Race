@@ -1,12 +1,14 @@
 // app/api/cron/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@/app/lib/supabase';
-import { executeRace, startNewRace } from '@/app/lib/race-engine';
-import { connection } from '@/app/lib/solana';
+import { createServerSupabaseClient } from '@/lib/supabase';
+import { executeRace, startNewRace } from '@/lib/race-engine';
+import { connection } from '@/lib/solana';
 import { PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+
+const MIN_BET_AMOUNT = 0.001; // Ignore dust deposits
 
 // Monitor horse wallets for direct deposits
 async function checkDirectDeposits(supabase: any, raceId: string, bettingEndsAt: string) {
@@ -53,7 +55,8 @@ async function checkDirectDeposits(supabase: any, raceId: string, bettingEndsAt:
           const postBalance = tx.meta.postBalances[horseIndex] || 0;
           const amount = (postBalance - preBalance) / LAMPORTS_PER_SOL;
 
-          if (amount <= 0) continue;
+          // Ignore dust deposits
+          if (amount < MIN_BET_AMOUNT) continue;
 
           const sender = accountKeys?.[0]?.toBase58() || '';
           if (!sender) continue;
@@ -91,7 +94,6 @@ async function checkDirectDeposits(supabase: any, raceId: string, bettingEndsAt:
 export async function GET(request: NextRequest) {
   const startTime = Date.now();
   
-  // Check source (for logging only - both are allowed)
   const authHeader = request.headers.get('authorization');
   const cronSecret = process.env.CRON_SECRET;
   const isVercelCron = cronSecret && authHeader === `Bearer ${cronSecret}`;
@@ -106,45 +108,48 @@ export async function GET(request: NextRequest) {
   let deposits = 0;
 
   try {
-    // 1. Check for expired races (status='betting' AND betting_ends_at < now)
-    // This is the ONLY way a race gets executed - database is source of truth
+    // 1. Check for expired races
     const { data: expiredRaces } = await supabase
       .from('races')
       .select('id, betting_ends_at')
       .eq('status', 'betting')
       .lt('betting_ends_at', nowIso);
 
-    // If no expired races, nothing to do (client spam has no effect)
+    // 2. No expired races - check active race for deposits
     if (!expiredRaces?.length) {
-      // Just check if we need to start a race
       const { data: activeRace } = await supabase
         .from('races')
         .select('id, betting_ends_at')
         .eq('status', 'betting')
         .maybeSingle();
 
-      if (!activeRace) {
+      if (activeRace) {
+        // Check deposits on active race
+        const d = await checkDirectDeposits(supabase, activeRace.id, activeRace.betting_ends_at);
+        deposits += d;
+      } else {
+        // No active race - start one
         startedRaceId = await startNewRace();
         if (startedRaceId) console.log(`[CRON] ✓ Started: ${startedRaceId.slice(0, 8)}`);
       }
 
+      const duration = Date.now() - startTime;
       return NextResponse.json({
         ok: true,
         executed: 0,
         startedRaceId,
-        deposits: 0,
-        duration: `${Date.now() - startTime}ms`,
+        deposits,
+        duration: `${duration}ms`,
       });
     }
 
-    // 2. Execute expired races
+    // 3. Execute expired races
     for (const race of expiredRaces) {
-      // Get last-minute deposits
+      // Get last-minute deposits before execution
       const d = await checkDirectDeposits(supabase, race.id, race.betting_ends_at);
       deposits += d;
       
-      // Execute race (this changes status from 'betting' to 'finished')
-      // If another request tries to execute same race, it will fail/noop
+      // Execute race (atomic lock prevents duplicates)
       const result = await executeRace(race.id);
       if (result) {
         console.log(`[CRON] ✓ Winner: ${result.winningHorseName}`);
@@ -152,11 +157,11 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // 3. Start new race
+    // 4. Start new race if needed
     const { data: activeRace } = await supabase
       .from('races')
       .select('id')
-      .eq('status', 'betting')
+      .in('status', ['betting', 'executing'])
       .maybeSingle();
 
     if (!activeRace) {
