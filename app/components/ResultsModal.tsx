@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image'; // Recommended for Next.js
 import type { RaceResult, HorseWithOdds } from '../types';
 
 interface ResultsModalProps {
@@ -52,8 +53,17 @@ export function ResultsModal({
           </button>
         </div>
 
-        {/* Winner */}
+        {/* Winner Section */}
         <div className="px-6 py-6 text-center">
+          {/* Centered Image */}
+          <div className="flex justify-center mb-3">
+            <img 
+              src="/win.png" 
+              alt="Winner Icon" 
+              className="w-12 h-12 object-contain" 
+            />
+          </div>
+          
           <div className="text-[10px] text-[#7CFF7C]/60 mb-1">
             WINNER
           </div>
