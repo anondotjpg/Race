@@ -3,7 +3,7 @@ import { createServerSupabaseClient } from './supabase';
 import { sendPayout, aggregateFunds } from './solana';
 import type { Bet, RaceResult } from '../types';
 
-const HOUSE_FEE_PERCENT = 5;
+const HOUSE_FEE_PERCENT = 7;
 const RACE_DURATION_MS = 5 * 60 * 1000; // 5 minutes betting
 
 // ─────────────────────────────────────────────
