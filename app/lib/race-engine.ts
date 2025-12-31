@@ -4,7 +4,7 @@ import { sendPayout, aggregateFunds, getWalletBalance } from './solana';
 import type { Bet, RaceResult } from '../types';
 
 const HOUSE_FEE_PERCENT = 7;
-const RACE_DURATION_MS = 3 * 60 * 1000; // 5 minutes betting
+const RACE_DURATION_MS = 7 * 60 * 1000; // 5 minutes betting
 const MIN_RENT_SOL = 0.001; // Minimum to keep in wallet
 
 // ─────────────────────────────────────────────
