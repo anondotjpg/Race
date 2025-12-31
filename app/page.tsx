@@ -124,7 +124,7 @@ export default function Home() {
       <Toaster position="top-right" reverseOrder={false} />
       <div className="fixed inset-0 pointer-events-none opacity-10 z-[5] bg-[linear-gradient(rgba(0,0,0,0)_50%,rgba(0,0,0,0.35)_50%)] bg-[length:100%_4px]" />
 
-      <header className="sticky top-0 z-40 bg-black border-b-4 border-[#555]">
+      <header className="sticky top-0 z-40 bg-black">
         <div className="max-w-7xl mx-auto px-4 py-3 grid grid-cols-3 items-center">
           <div className="flex items-center">
             <img src="/load.gif" alt="Logo" className="h-10 w-auto pixelated" />
