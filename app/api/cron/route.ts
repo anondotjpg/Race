@@ -113,19 +113,6 @@ export async function GET(request: NextRequest) {
   let directDeposits = 0;
 
   try {
-    // 0. Check active race for direct deposits first
-    const { data: activeForMonitor } = await supabase
-      .from('races')
-      .select('id, betting_ends_at')
-      .eq('status', 'betting')
-      .maybeSingle();
-
-    if (activeForMonitor) {
-      console.log('[CRON] Step 0: Checking for direct deposits...');
-      directDeposits = await checkDirectDeposits(supabase, activeForMonitor.id, activeForMonitor.betting_ends_at);
-      console.log(`[CRON] Direct deposits recorded: ${directDeposits}`);
-    }
-
     // 1. Check for expired betting races
     console.log('[CRON] Step 1: Checking for expired betting races...');
     const { data: expiredRaces, error: expiredError } = await supabase
@@ -140,18 +127,23 @@ export async function GET(request: NextRequest) {
 
     console.log('[CRON] Expired races found:', expiredRaces?.length ?? 0);
 
-    // Execute expired races
+    // Execute expired races (check deposits FIRST!)
     for (const race of expiredRaces ?? []) {
-      console.log(`[CRON] Executing race: ${race.id}`);
+      // Check for any last-minute direct deposits BEFORE executing
+      console.log(`[CRON] Checking direct deposits for race: ${race.id}`);
+      const depositsFound = await checkDirectDeposits(supabase, race.id, race.betting_ends_at);
+      console.log(`[CRON] Direct deposits recorded: ${depositsFound}`);
       
+      console.log(`[CRON] Executing race: ${race.id}`);
       const result = await executeRace(race.id);
       if (result) {
         console.log(`[CRON] ✓ Race finished - Winner: ${result.winningHorseName}`);
         executed++;
+        directDeposits += depositsFound;
       }
     }
 
-    // 2. Check for active betting race
+    // 2. Check for active betting race (and monitor for deposits)
     console.log('[CRON] Step 2: Checking for active betting race...');
     const { data: activeRace } = await supabase
       .from('races')
@@ -160,6 +152,15 @@ export async function GET(request: NextRequest) {
       .maybeSingle();
 
     console.log('[CRON] Active race:', activeRace?.id ?? 'NONE');
+
+    // Also check active race for deposits (so UI updates in real-time)
+    if (activeRace) {
+      const activeDeposits = await checkDirectDeposits(supabase, activeRace.id, activeRace.betting_ends_at);
+      directDeposits += activeDeposits;
+      if (activeDeposits > 0) {
+        console.log(`[CRON] Active race deposits: ${activeDeposits}`);
+      }
+    }
 
     // 3. Start new race if none active
     if (!activeRace) {
