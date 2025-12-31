@@ -89,7 +89,7 @@ export function ResultsModal({ result, horses, userWallet, onClose }: ResultsMod
             onClick={onClose}
             className="w-full py-2 border-2 border-[#1aff00] text-[#1aff00] text-xs font-bold hover:bg-[#1aff00] hover:text-black transition-all"
           >
-            CONFIRM & RETURN
+            RETURN
           </button>
         </div>
       </div>
