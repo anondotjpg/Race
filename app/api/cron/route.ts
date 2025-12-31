@@ -8,10 +8,6 @@ import { PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-// Simple in-memory rate limit (resets on cold start)
-let lastExecutionTime = 0;
-const MIN_EXECUTION_GAP_MS = 5000; // 5 seconds between executions
-
 // Monitor horse wallets for direct deposits
 async function checkDirectDeposits(supabase: any, raceId: string, bettingEndsAt: string) {
   let recorded = 0;
@@ -95,26 +91,12 @@ async function checkDirectDeposits(supabase: any, raceId: string, bettingEndsAt:
 export async function GET(request: NextRequest) {
   const startTime = Date.now();
   
-  // Check if this is from Vercel cron (has auth) or client trigger (no auth)
+  // Check source (for logging only - both are allowed)
   const authHeader = request.headers.get('authorization');
   const cronSecret = process.env.CRON_SECRET;
   const isVercelCron = cronSecret && authHeader === `Bearer ${cronSecret}`;
   
-  // Rate limit client triggers (not Vercel cron)
-  if (!isVercelCron) {
-    const timeSinceLastExec = Date.now() - lastExecutionTime;
-    if (timeSinceLastExec < MIN_EXECUTION_GAP_MS) {
-      return NextResponse.json({ 
-        ok: true, 
-        skipped: true, 
-        reason: 'rate-limited',
-        retryIn: MIN_EXECUTION_GAP_MS - timeSinceLastExec
-      });
-    }
-  }
-  
-  lastExecutionTime = Date.now();
-  console.log(`🕒 [CRON] ${isVercelCron ? 'Vercel' : 'Client'} trigger @ ${new Date().toISOString()}`);
+  console.log(`🕒 [CRON] ${isVercelCron ? 'Vercel' : 'Client'} @ ${new Date().toISOString()}`);
 
   const supabase = createServerSupabaseClient();
   const nowIso = new Date().toISOString();
@@ -124,17 +106,45 @@ export async function GET(request: NextRequest) {
   let deposits = 0;
 
   try {
-    // 1. Execute expired races
+    // 1. Check for expired races (status='betting' AND betting_ends_at < now)
+    // This is the ONLY way a race gets executed - database is source of truth
     const { data: expiredRaces } = await supabase
       .from('races')
       .select('id, betting_ends_at')
       .eq('status', 'betting')
       .lt('betting_ends_at', nowIso);
 
-    for (const race of expiredRaces ?? []) {
+    // If no expired races, nothing to do (client spam has no effect)
+    if (!expiredRaces?.length) {
+      // Just check if we need to start a race
+      const { data: activeRace } = await supabase
+        .from('races')
+        .select('id, betting_ends_at')
+        .eq('status', 'betting')
+        .maybeSingle();
+
+      if (!activeRace) {
+        startedRaceId = await startNewRace();
+        if (startedRaceId) console.log(`[CRON] ✓ Started: ${startedRaceId.slice(0, 8)}`);
+      }
+
+      return NextResponse.json({
+        ok: true,
+        executed: 0,
+        startedRaceId,
+        deposits: 0,
+        duration: `${Date.now() - startTime}ms`,
+      });
+    }
+
+    // 2. Execute expired races
+    for (const race of expiredRaces) {
+      // Get last-minute deposits
       const d = await checkDirectDeposits(supabase, race.id, race.betting_ends_at);
       deposits += d;
       
+      // Execute race (this changes status from 'betting' to 'finished')
+      // If another request tries to execute same race, it will fail/noop
       const result = await executeRace(race.id);
       if (result) {
         console.log(`[CRON] ✓ Winner: ${result.winningHorseName}`);
@@ -142,19 +152,16 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // 2. Ensure active race exists
+    // 3. Start new race
     const { data: activeRace } = await supabase
       .from('races')
-      .select('id, betting_ends_at')
+      .select('id')
       .eq('status', 'betting')
       .maybeSingle();
 
     if (!activeRace) {
       startedRaceId = await startNewRace();
       if (startedRaceId) console.log(`[CRON] ✓ New race: ${startedRaceId.slice(0, 8)}`);
-    } else {
-      const d = await checkDirectDeposits(supabase, activeRace.id, activeRace.betting_ends_at);
-      deposits += d;
     }
 
     const duration = Date.now() - startTime;
